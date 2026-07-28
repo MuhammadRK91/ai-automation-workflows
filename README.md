@@ -19,6 +19,20 @@ Every export here is sanitised — see [SANITISING.md](SANITISING.md).
 | [06](06-lead-generation) | Lead generation and outreach | n8n | LLM agents |
 | [07](07-voice-appointment-agent) | Voice appointment agent | Make | gpt-4o |
 
+## Why seven
+
+There are over 150 workflows in my n8n instance, plus Make scenarios. Seven are in this repo.
+
+They were picked because each one solves a *different* problem, not because they were the largest:
+map-reduce summarisation past a context limit, polling an async job instead of holding a worker open,
+an agent constrained by numbers computed in code before it runs, fuzzy normalisation of messy human
+input, strict structured output from a vision model, fan-out to platforms with incompatible media
+handling, and a voice interface where the model must never be the source of truth.
+
+A folder of 150 near-identical CRUD flows would demonstrate less than these seven do.
+
+---
+
 **Models are chosen per task, not per vendor.** Gemini 2.5 Pro does the meal-photo vision work because
 it handles strict JSON-only output well under a long constraint prompt; gpt-5.1 drives the meal-plan
 agent where reasoning over constraints matters; gpt-4o handles the high-volume, low-latency
