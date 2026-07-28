@@ -1,5 +1,11 @@
 # Sanitising an export before it is committed
 
+> **Two automatic gates back this up.** `scripts/secret-scan.py` runs as a pre-commit hook and again
+> as a GitHub Actions job on every push, failing on JWTs, provider keys, private key blocks, tokens
+> in query strings, and any attempt to commit a `.env` file. Enable the hook once per clone with
+> `git config core.hooksPath .githooks`. The sanitiser below is the tool that makes an export
+> publishable; the scanner is the net that catches it when someone forgets to run it.
+
 n8n and Make exports carry more than the graph. Before anything lands in this repo it goes through
 [`scripts/sanitise.py`](scripts/sanitise.py) and then a human read.
 
