@@ -47,7 +47,8 @@ A folder of 150 near-identical CRUD flows would demonstrate less than these elev
 **Models are chosen per task, not per vendor.** Gemini 2.5 Pro does the meal-photo vision work because
 it handles strict JSON-only output well under a long constraint prompt; gpt-5.1 drives the meal-plan
 agent where reasoning over constraints matters; gpt-4o handles the high-volume, low-latency
-classification and copy jobs. Three providers across seven workflows is a deliberate result of that.
+classification and copy jobs. Six providers across eleven workflows is a deliberate result of that,
+not vendor tourism.
 
 ---
 
@@ -132,7 +133,7 @@ retried from stored assets rather than regenerated — which matters when regene
 produces something different.
 
 ## 05 · E-commerce shipping
-*Make · gpt-4o · TCS courier API · Supabase · Google Drive · 34 redactions to publish*
+*Make · gpt-4o · TCS courier API · Supabase · Google Drive*
 
 Running in production for my own business. Watches for orders and books couriers automatically.
 
