@@ -1,6 +1,6 @@
 # Audiobook generation
 
-*n8n · gpt-4o · ElevenLabs · Transloadit · Supabase*
+*n8n · gpt-4o · ElevenLabs · PDF.co · Transloadit · Supabase*
 
 PDF in, narrated audio summary out. Map-reduce summarisation, per-segment speech synthesis, then async concatenation polled to completion.
 

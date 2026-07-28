@@ -84,7 +84,7 @@
       "credentials": {
         "googlePalmApi": {
           "id": "YOUR_CREDENTIAL_ID",
-          "name": "Google Gemini(PaLM) Api account"
+          "name": "YOUR_googlePalmApi_CREDENTIAL"
         }
       }
     },
@@ -169,7 +169,7 @@
       "credentials": {
         "supabaseApi": {
           "id": "YOUR_CREDENTIAL_ID",
-          "name": "Supabase CalTrack"
+          "name": "YOUR_supabaseApi_CREDENTIAL"
         }
       }
     },

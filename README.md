@@ -27,12 +27,12 @@ classification and copy jobs. Three providers across seven workflows is a delibe
 ---
 
 ## 01 · Audiobook generation
-*n8n · gpt-4o · ElevenLabs · Transloadit · Supabase · 31 nodes*
+*n8n · gpt-4o · ElevenLabs · PDF.co · Transloadit · Supabase · 31 nodes*
 
 PDF in, narrated audio summary out, triggered by webhook.
 
 ```
-PDF upload → paginate → chunk
+PDF upload → PDF.co: extract + paginate → chunk
    → map:    summarise each chunk       (gpt-4o)
    → reduce: single coherent summary    (gpt-4o)
    → clean + segment text
@@ -173,7 +173,7 @@ interface, not the source of truth. That separation is the entire design.
 **Orchestration** n8n · Make
 **AI** OpenAI gpt-5.1, gpt-4o, DALL·E 3 · Google Gemini 2.5 Pro · ElevenLabs
 **Data** Supabase (Postgres, Storage, Edge Functions) · Google Sheets
-**Media** Transloadit
+**Documents & media** PDF.co · Transloadit
 **Integrations** Google Calendar · Google Drive · Cal.com · VAPI · TCS courier API · AnyMailFinder ·
 Instantly · Instagram · Facebook · LinkedIn · X
 

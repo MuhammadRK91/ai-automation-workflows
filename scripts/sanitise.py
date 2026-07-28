@@ -166,10 +166,18 @@ def walk(node, counts: Counter, parent_key: str = ""):
         for key, value in list(node.items()):
             # n8n credential block: {"openAiApi": {"id": "...", "name": "OpenAi account"}}
             if key == "credentials" and isinstance(value, dict):
-                for cred in value.values():
-                    if isinstance(cred, dict) and "id" in cred:
-                        cred["id"] = "YOUR_CREDENTIAL_ID"
-                        counts["credential id"] += 1
+                # The credential *type* (openAiApi, supabaseApi) is what tells an
+                # importer which credential to configure, and it is the dict key —
+                # so both the id and the user-chosen display name can go. Names are
+                # not secret but they leak unrelated project names.
+                for ctype, cred in value.items():
+                    if isinstance(cred, dict):
+                        if "id" in cred:
+                            cred["id"] = "YOUR_CREDENTIAL_ID"
+                            counts["credential id"] += 1
+                        if cred.get("name"):
+                            cred["name"] = f"YOUR_{ctype}_CREDENTIAL"
+                            counts["credential name"] += 1
                 walk(value, counts, key)
             elif isinstance(value, (dict, list)):
                 walk(value, counts, key)
