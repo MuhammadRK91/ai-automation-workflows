@@ -1,0 +1,23 @@
+# Raw, unsanitised exports live here and never get committed.
+# Run scripts/sanitise.py to produce the version that does.
+raw/*
+!raw/.gitkeep
+*.raw.json
+*.unsanitised.json
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
