@@ -27,18 +27,39 @@ git diff --cached
 
 ## What gets replaced
 
+Across the seven exports in this repo, 104 values.
+
 **By key name** — anything under `apiKey`, `token`, `secret`, `password`, `authorization`,
 `clientSecret`, `privateKey` and similar. n8n credential blocks keep their display name (`OpenAi
-account`) and lose the instance id, because the name documents which credential type to configure and
-the id is meaningless outside one instance.
+account`) and lose the instance id: the name documents which credential type to configure, the id is
+meaningless outside one instance.
 
-Resource pointers — `documentId`, `sheetId`, `folderId`, `driveId`, `calendarId` — are also replaced.
-Not secret, but they identify one person's Drive and are useless to anyone importing the workflow.
+Resource pointers (`documentId`, `sheetId`, `folderId`, `calendarId`, `campaign`) and account or
+contact fields (`tcsaccount`, `mobile`, `phone`) are replaced too. Not credentials, but they identify
+a real billing account or a real person.
 
-**By shape, anywhere in the file** — JWTs and Supabase anon keys, `sk-` OpenAI keys, `sk-ant-`
-Anthropic keys, `gh*_` GitHub tokens, `AIza…` Google keys, `xox*-` Slack tokens, `Bearer …` headers,
-Supabase project URLs, Make webhook URLs, n8n webhook URLs, bare 32+ character hex strings, and email
-addresses.
+**By shape, anywhere in the file** — JWTs and Supabase anon keys, `sk-` OpenAI keys, `sk_` ElevenLabs
+keys, `sk-ant-` Anthropic keys, `cal_live_` Cal.com keys, `gh*_` GitHub tokens, `AIza…` Google keys,
+`xox*-` Slack tokens, `Bearer …` headers, Supabase project URLs, Make and n8n webhook URLs, bare 32+
+character hex strings, and email addresses.
+
+**In the four places a key name alone doesn't reach.** Each of these leaked a real credential on a
+first pass and is the reason the residual scan exists:
+
+- *Query strings.* `?accesstoken=…` is still a token. The key name lives in the URL, not in the JSON.
+- *Resource locators.* n8n stores `{"__rl": true, "value": "<real id>", "cachedResultUrl": "https://…"}`,
+  so the leaf key is `value` and the cached URL embeds the id a second time, under a different parent.
+- *Embedded request bodies.* Make stores a whole JSON document inside a string. Its quotes arrive
+  escaped (`\"accesstoken\"`), so text patterns miss it. The parsed form is walked instead — and when
+  the body contains unquoted templates (`{{5.total}}`) and won't parse at all, an escaped-text pass
+  catches it.
+- *Name/value parameter pairs.* n8n HTTP headers and body fields are `{"name": "campaign", "value": "…"}`,
+  so the meaningful key is a sibling of the value rather than its parent.
+
+**Left alone deliberately** — public vendor hosts (`api.elevenlabs.io`, `api.cal.com`,
+`ociconnect.tcscourier.com` …), because they document the stack and that is the point. Template
+references (`{{3.record.shipping_phone}}`) are wiring, not data. n8n's internal UUIDs — node ids,
+condition ids, `versionId` — are structural and unlock nothing.
 
 ## What the script cannot do
 

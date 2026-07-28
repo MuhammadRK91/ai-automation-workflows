@@ -1,8 +1,8 @@
-# Audiobook generation
+# Meal photo analysis
 
-*n8n · gpt-4o · ElevenLabs · Transloadit · Supabase*
+*n8n · Google Gemini 2.5 Pro · Supabase*
 
-PDF in, narrated audio summary out. Map-reduce summarisation, per-segment speech synthesis, then async concatenation polled to completion.
+Identifies a meal from a photo and itemises calories and macros, constrained to raw JSON so the mobile client is only ever handed a parsed row.
 
 ![Workflow canvas](canvas.png)
 
@@ -14,4 +14,4 @@ PDF in, narrated audio summary out. Map-reduce summarisation, per-segment speech
 Every credential, account id, webhook path and resource id in the export is a placeholder. See
 [SANITISING.md](../SANITISING.md) for what was replaced and why.
 
-Full write-up with the design rationale is in the [root README](../README.md#01--audiobook-generation).
+Full write-up with the design rationale is in the [root README](../README.md#03--meal-photo-analysis).

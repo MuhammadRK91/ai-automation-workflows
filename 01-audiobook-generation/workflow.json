@@ -1,0 +1,1074 @@
+{
+  "name": "Audio Books",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_ID",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -384,
+        0
+      ],
+      "id": "354e815d-b653-4b4e-9ebd-31c7fd2bd034",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "operation": "Upload File to PDF.co",
+        "binaryData": true,
+        "binaryPropertyName": "file",
+        "name": "={{ $binary.file.fileName }}"
+      },
+      "type": "n8n-nodes-pdfco.PDFco Api",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        0
+      ],
+      "id": "8dfac74b-8fbe-4f00-8b0e-1c64478c2724",
+      "name": "Upload a file",
+      "credentials": {
+        "pdfcoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "PDF.co account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "PDF Information & Form Fields",
+        "url": "={{ $('Upload a file').item.json.url }}",
+        "advancedOptions": {}
+      },
+      "type": "n8n-nodes-pdfco.PDFco Api",
+      "typeVersion": 1,
+      "position": [
+        96,
+        0
+      ],
+      "id": "161a45a9-e8d7-4466-946a-4cb1a8fd5489",
+      "name": "Get Info about file",
+      "credentials": {
+        "pdfcoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "PDF.co account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pageCount = $json.body.PageCount;   // from PDF Info\nconst batchSize = 20;\n\nconst ranges = [];\nfor (let i = 1; i <= pageCount; i += batchSize) {\n  const start = i;\n  const end = Math.min(i + batchSize - 1, pageCount);\n  ranges.push(start === end ? `${start}` : `${start}-${end}`);\n}\n\nreturn ranges.map(r => ({ json: { range: r } })); // <- emit one item per range"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        0
+      ],
+      "id": "e5c6ba1a-351c-4626-b6e7-730b5a873dcd",
+      "name": "Page number"
+    },
+    {
+      "parameters": {
+        "operation": "Split PDF",
+        "url": "={{ $('Upload a file').item.json.url }}",
+        "pages": "={{ $json.range }}",
+        "advancedOptionsPageNumber": {
+          "name": "=chunk_{{ $json.range }}.pdf"
+        }
+      },
+      "type": "n8n-nodes-pdfco.PDFco Api",
+      "typeVersion": 1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "f14fa21a-f39e-43b0-bccd-40414cf1baba",
+      "name": "Creat Chunks",
+      "credentials": {
+        "pdfcoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "PDF.co account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "Convert from PDF",
+        "url": "={{ $json.body[0] }}",
+        "advancedOptions": {
+          "name": "=chunk_{{$node[\"Page number\"].json.range}}.txt\n"
+        }
+      },
+      "type": "n8n-nodes-pdfco.PDFco Api",
+      "typeVersion": 1,
+      "position": [
+        576,
+        0
+      ],
+      "id": "fbd1a5b4-2fe7-4b6c-b28a-db76d6ee7ff2",
+      "name": "Convert to Text",
+      "credentials": {
+        "pdfcoApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "PDF.co account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        144
+      ],
+      "id": "e7baf052-08dd-47a8-978a-1354e38ebe78",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "gpt-4o"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        144
+      ],
+      "id": "337b6f72-5828-46a8-a4c8-171b9913c8cd",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body }}",
+        "options": {
+          "systemMessage": "You are an assistant that summarizes long texts (**books**) faithfully and intelligently.\n\nYour goal is to capture the meaningful body of the book only — the core chapters and main sections — while skipping irrelevant parts like prefaces, acknowledgments, appendices, notes, and indexes.\n\n## INPUT\nA 15–25-page chunk of text from a book.  \nChunks may start or end mid-chapter, and may include extra material such as table of contents, preface, acknowledgments, notes, or indexes.\n\n---\n\n## LANGUAGE DETECTION & ENFORCEMENT RULE\nBefore writing any output, you **must perform these steps** in this exact order:\n\n1. **Detect** the primary language of the input text automatically.  \n   - If more than 70 % of the words use **Arabic script** (e.g., Urdu, Persian, Arabic), set the working language to that script.  \n   - If more than 70 % of the words use **Latin script** (e.g., English, French, Spanish), set the working language to that language.\n\n2. **Lock** the working language before starting the summary.  \n   - You are **not allowed** to mix languages.  \n   - You are **not allowed** to translate or switch to English unless the input itself is English.  \n   - Proper names and unchanged titles may stay as in the source.\n\n3. **Language Consistency Check (mandatory):**  \n   - After drafting, verify that **every sentence** is written in the detected language.  \n   - If any sentence or phrase contains foreign words (for example, English connectors like *the, during, however* inside a French or Arabic text), delete and rewrite that sentence fully in the correct language.  \n   - If more than 30 % of the output requires rewriting, restart the summary entirely in the correct language.\n\nThe final result must be written **entirely** in the detected input language — not partially, not translated, and not mixed.\n\n---\n\n## YOUR TASK\n**Identify the useful part of the chunk:**\n- If the chunk contains both extra material (e.g., preface, index) and a chapter or part of a chapter, summarize **only** the valid chapter content and ignore the rest.\n- If the entire chunk is only extra material (acknowledgments, notes, index, about the author), **output nothing** (empty output).\n- When unsure (e.g., if the first few pages are content listings), assume real content begins when a narrative or teaching tone starts (“Introduction”, “Chapter 1”, “Lesson 1”, etc.).\n\n**Summarize faithfully:**\n- Capture all key ideas, arguments, lessons, definitions, and relevant examples that clarify main points.\n- Preserve subtle or unique insights, even small ones.\n- Remove filler, repetition, or verbose explanations.\n- Compress but never skip meaningful ideas.\n- If the chunk ends mid-chapter, end naturally without forcing closure — the next chunk will continue.\n\n---\n\n## LANGUAGE & STYLE\n- Match the input language exactly (Arabic → Arabic, English → English, French → French, etc.).  \n- Use simple, clear phrasing for accessibility.  \n- Maintain a neutral tone — do not critique, interpret, or speculate.\n\n---\n\n## SCOPE FILTER\nIgnore and never summarize these sections if they appear fully or partially:  \n**Preface, Foreword, Acknowledgments, Notes, Endnotes, Footnotes, Index, About the Author, Ads, Catalog, Table of Contents, Copyright Page, Dedication, Appendix.**  \nHowever, if these occur in a mixed chunk (e.g., index + part of Chapter 1), keep only the valid book section and ignore the rest.\n\n---\n\n## HEADINGS & STRUCTURE\n- Do **not** write “Summary”, “Overview”, or similar labels.  \n- Mirror the book’s actual structure — e.g., “Introduction”, “Chapter 1”, “Lesson 1: The Rich Don’t Work for Money”.  \n- If the chunk starts mid-chapter, just continue naturally — **don’t create fake headings**.  \n- If no clear heading appears, begin directly with the main content.  \n- Merge repeated headings from the same section into one flow.\n\n---\n\n## OUTPUT RULES\n- Output **only** the clean, continuous summary text.  \n- No commentary, metadata, or notes.  \n- Do not quote long passages; paraphrase in your own words.  \n- If the entire chunk contains only skipped material, **output nothing** (empty output).  \n- If the chunk mixes real and non-real content, keep only the real part.\n\n---\n\n## BEHAVIOR EXAMPLES\n- If the first 5 pages are “Contents” + “Acknowledgments” and page 6 starts “Chapter 1”, summarize **from page 6 onward**.  \n- If the last 5 pages are “Notes” or “About the Author”, ignore those but keep the earlier part (e.g., “Final Thoughts”).  \n- If all 20 pages are appendix or notes, **output nothing**.\n\n**When summarizing each chunk:**\n- Mirror original section headings exactly if present (e.g., “The 1st Law: Make It Obvious”).  \n- Deduplicate repeated ideas within the chunk; include examples only when they clarify a key concept.  \n- Exclude general neuroscience/economics/psychology tangents unless clearly central to the author’s point.  \n- Write in clean, connected prose so each chunk summary reads smoothly and logically."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        0
+      ],
+      "id": "59b9f00e-004e-4a9f-8beb-d71631786270",
+      "name": "Summarize Chunks"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.combined }}",
+        "options": {
+          "systemMessage": "You are an assistant that reads a combined set of chunk summaries and produces one short, cohesive final summary of the entire work.\n\n## LANGUAGE DETECTION & ENFORCEMENT (MANDATORY)\nBefore writing any output, do these steps:\n\n1) Detect the primary language of the combined text.\n   - If ≥70% of tokens use Arabic script (Urdu, Arabic, Persian), set OUTPUT_LANGUAGE to that exact language.\n   - Otherwise, set OUTPUT_LANGUAGE to the dominant Latin-script language (e.g., English, French, Spanish).\n\n2) Lock OUTPUT_LANGUAGE.\n   - Write ONLY in OUTPUT_LANGUAGE.\n   - Do NOT translate or switch languages mid-sentence.\n   - Proper names may remain as in source.\n\n3) Self-check before returning:\n   - If any sentence contains foreign words (e.g., English connectors like “however, during” in French text), delete and rewrite that sentence in OUTPUT_LANGUAGE.\n   - If any part mixes languages, rewrite the whole paragraph.\n\nReturn only the final text in OUTPUT_LANGUAGE — no metadata or language mention.\n\n---\n\n## TASK\nRead all combined chunk summaries and output ONE cohesive paragraph (120–180 words) that captures the work’s core message and progression.  \n- If the work is about habits/behavior (e.g., Atomic Habits), emphasize: core thesis, the Four Laws, identity-based habits, systems vs goals, environment design, and maintenance tactics (Two-Minute Rule, tracking, Goldilocks, reflection).  \n- Otherwise, adapt to the actual domain: synthesize the central argument, key parts/turning points, and how ideas develop.\n\nRemove duplicates and contradictions across chunks. Ignore promotional blurbs, ads, acknowledgments, footnotes, indices, and “about the author.”\n\n---\n\n## OUTPUT RULES\n- Output EXACTLY one paragraph (no headings, bullets, lists).\n- Do not restate section names or chapter lists.\n- Do not say “summary” or “the book says.”\n- Never ask questions or apologize.\n- Style should match source language conventions (formal French → formal French; Urdu → smooth narrative Urdu; English → neutral analytical English).\n\n---\n\n## QUALITY CHECK (MANDATORY)\nBefore returning, verify:\n- Length is ~120–180 words.\n- 100% of text is in OUTPUT_LANGUAGE (no mixing).\n- No filler, promos, or metadata.\n- Paragraph is fluent, self-contained, and consistent in tone."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1168,
+        0
+      ],
+      "id": "5451b12e-17f5-4a89-ad64-30675d019070",
+      "name": "Final Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mode: Run Once for All Items\nconst summaries = items.map(i => i.json.output || i.json); // adjust if your field name differs\nconst withRanges = items.map(i => {\n  const r = i.json.range ? `[Pages ${i.json.range}] ` : '';\n  return r + (i.json.output ?? i.json);\n});\n\nreturn [\n  {\n    json: {\n      // choose one:\n      combined: withRanges.join('\\n\\n---\\n\\n')  // keeps page labels if available\n      // combined: summaries.join('\\n\\n---\\n\\n') // plain summaries\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        0
+      ],
+      "id": "8cc006cc-bfe2-4200-b6e5-10d0d85dc149",
+      "name": "Combine"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean Text -> chunk -> add book_slug from \"Get Info about file\"\n\n// ===== 0) Build book_slug =====\nconst INFO_NODE_NAME = \"Get Info about file\";\nconst USER_INFO_NODE = \"User Information\";\n\nfunction slugify(s) {\n  return String(s || \"book\")\n    .normalize(\"NFKD\")               // handle accents safely\n    .replace(/\\p{Diacritic}/gu, \"\")  // strip diacritics\n    .replace(/\\.[^/.]+$/, \"\")        // drop extension\n    .toLowerCase()\n    .replace(/[_\\s]+/g, \"-\")         // spaces/underscores -> -\n    .replace(/[^a-z0-9-]/g, \"\")      // strip non-url chars\n    .replace(/-+/g, \"-\")             // collapse --\n    .replace(/^-|-$/g, \"\");          // trim -\n}\n\n// Safely read the PDF info node\nlet infoItem = null;\ntry {\n  const arr = $items(INFO_NODE_NAME, 0, 0) || [];\n  infoItem = arr[0] || null;\n} catch {}\nconst infoJson = infoItem?.json ?? {};\nconst infoBin  = infoItem?.binary ?? {};\n\n// Title (often empty)\nconst titleFromInfo = infoJson?.body?.Title || infoJson?.Title || \"\";\n\n// Read file_name from User Information\nconst fileNameFromUser = $node[USER_INFO_NODE]?.json?.file_name || \"\";\n\n// Other fallbacks just in case\nconst fileNameFromInfo =\n  infoJson?.fileName ||\n  infoBin?.data?.fileName ||\n  infoBin?.file?.fileName ||\n  \"\";\nconst fileNameFromHere =\n  $json?.fileName ||\n  $binary?.data?.fileName ||\n  \"\";\n\n// Choose best: Title > User file_name > other fallbacks\nconst chosenName =\n  (titleFromInfo && titleFromInfo.trim()) ||\n  fileNameFromUser ||\n  fileNameFromInfo ||\n  fileNameFromHere ||\n  \"book.pdf\";\n\nconst book_slug = slugify(chosenName);\n\n// ===== 1) Get source text (use merged_text from previous step) =====\nlet raw =\n  $json?.merged_text ||   // comes from \"Text and Final Summary\" step\n  $json?.text ||\n  $json?.output ||\n  \"\";\nif (typeof raw !== \"string\") return [];\n\n// ===== 1a) Safe meta scrub (tail-only, very specific AI/meta phrases) =====\nfunction stripMetaLines(rawText) {\n  const LINES = rawText.split(/\\r?\\n/);\n  const tailStart = Math.max(0, LINES.length - 150); // scan only the tail\n  const head = LINES.slice(0, tailStart);\n  const tail = LINES.slice(tailStart);\n\n  const META_SUBSTRINGS = [\n    \"I'm unable to provide a summary for\",\n    \"I'm unable to include any sections from\",\n    \"I can't assist with that\",\n    \"I cannot assist with that\",\n    \"I am not able to\",\n    \"Please provide a section from the main text\",\n    \"Please provide a different part of the text\",\n    \"Could you provide a different part\",\n    \"This section typically contains metadata\",\n    \"bibliographic or index notes\",\n    \"rather than substantive content\",\n    \"from the book itself\",\n    \"as an AI\",\n    \"for summarization\",\n    \"section from the main text\",\n    \"provide a different part of the text\",\n    \"Notes” as this section typically contains metadata\",\n  ];\n\n  const HARD_FILTERS = [\n    /^```+$/,                 // code fences\n    /^\\s*Output:?$/i,\n    /^\\s*Final Summary\\s*$/i, // accidental duplicate heading\n  ];\n\n  const tailClean = tail.filter(line => {\n    const trimmed = line.trim();\n    if (!trimmed) return false;\n\n    if (HARD_FILTERS.some(rx => rx.test(trimmed))) return false;\n\n    const hasMeta = META_SUBSTRINGS.some(s => trimmed.includes(s));\n    return !hasMeta;\n  });\n\n  return [...head, ...tailClean].join(\"\\n\");\n}\nraw = stripMetaLines(raw);\n\n// ===== 2) Cleanup =====\nlet text = raw\n  .replace(/```+/g, \"\")            // drop stray code fences\n  .replace(/\\*\\*/g, \"\")\n  .replace(/\\*/g, \"\")\n  .replace(/\\\\n\\\\n/g, \"\\n\\n\")      // handle escaped newlines\n  .replace(/\\\\n/g, \"\\n\")\n  .replace(/\\r/g, \"\")\n  .replace(/[ \\t]+/g, \" \")\n  .replace(/\\n[ \\t]+/g, \"\\n\")\n  .trim();\nif (!text) return [];\n\n// ===== 3) Chunking =====\nconst MAX = 2800;  // hard ceiling per chunk\nconst MIN = 2000;  // prefer at least this size\n\nconst paras = text.split(/\\n{2,}/).map(p => p.trim()).filter(Boolean);\n\nconst chunks = [];\nlet cur = \"\";\n\nfunction pushChunk() {\n  if (!cur.trim()) return;\n  chunks.push(cur.trim());\n  cur = \"\";\n}\n\nfor (const p of paras) {\n  if ((cur + \"\\n\\n\" + p).length <= MAX) {\n    cur = cur ? cur + \"\\n\\n\" + p : p;\n  } else {\n    if (cur.length >= MIN) {\n      pushChunk();\n      cur = p;\n    } else {\n      // sentence-aware split (handles quotes/parentheses reasonably)\n      const sents = p.match(/[^.!?…]+[.!?…]+\"?'?\\)?\\s*/g) || [p];\n      for (const s0 of sents) {\n        const s = s0.trim();\n        if ((cur + \" \" + s).length <= MAX) {\n          cur = cur ? cur + \" \" + s : s;\n        } else {\n          pushChunk();\n          cur = s;\n        }\n      }\n    }\n  }\n}\npushChunk();\n\n// Fallback: if a single paragraph has no punctuation and still > MAX, hard-slice\nfor (let i = 0; i < chunks.length; i++) {\n  if (chunks[i].length > MAX + 200) {\n    const hard = [];\n    let t = chunks[i];\n    while (t.length) {\n      hard.push(t.slice(0, MAX));\n      t = t.slice(MAX);\n    }\n    chunks.splice(i, 1, ...hard);\n    i += hard.length - 1;\n  }\n}\n\n// ===== 4) Per-chunk cleanup for TTS + include book_slug =====\nconst itemsOut = chunks.map((t, i) => {\n  let tt = t;\n  tt = tt.replace(/^\\s*##\\s+/gm, \"\");\n  tt = tt.replace(/^\\s*(Introduction|Conclusion)\\b/gm, \"$1:\");\n  tt = tt.replace(/[“”]/g, '\"').replace(/[‘’]/g, \"'\").replace(/\\s*—\\s*/g, \" — \");\n  tt = tt.replace(/[ \\t]+/g, \" \").replace(/\\n{3,}/g, \"\\n\\n\").trim();\n  if (!/[.!?]\"?\\s*$/.test(tt)) tt += \".\";\n  tt += \"\\n\\n\";\n  return { json: { index: i, text: tt, book_slug } };\n});\n\nreturn itemsOut;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        0
+      ],
+      "id": "de3965b5-5d86-4699-be47-71024b689033",
+      "name": "Clean Text"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/text-to-speech/NFG5qt843uXKj4pFvR7C?output_format=mp3_44100_128",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xi-api-key",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "audio/mpeg"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model_id",
+              "value": "eleven_multilingual_v2"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -512,
+        288
+      ],
+      "id": "77c7eb92-bae3-4f61-becb-7e16af2e2547",
+      "name": "Eleven Labs TTS"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1824,
+        0
+      ],
+      "id": "2bae69f5-385e-4c84-97cd-7ed8f3bc2002",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {
+          "includeBinaries": false
+        }
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        -16
+      ],
+      "id": "ef3f06c6-4837-41f6-8cfc-b460b87a6a04",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "input": "={{ $json.text }}",
+        "voice": "fable",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1840,
+        160
+      ],
+      "id": "fb29af78-046b-4315-9e48-c26b6ca3eef0",
+      "name": "Generate audio",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR_PROJECT.supabase.co/storage/v1/object/audio_books/{{ $('Clean Text').item.json.book_slug }}/{{ $('User Information').first().json.user_id }}/{{ $('User Information').first().json.upload_id }}/part_{{ $('Clean Text').item.json.index }}.mp3",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "apikey",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "audio/mpeg"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2016,
+        160
+      ],
+      "id": "eee5a988-dde0-4390-81c9-379e0cf0405c",
+      "name": "Upload to Supabase"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Run Once For All Items OR For Each Item (both fine)\nreturn items.map((item, i) => {\n  const j = item.json || {};\n\n  // Pick only what we need downstream\n  const public_url = j.public_url ?? j.url ?? null;\n  const index      = j.index ?? i;           // fallback to order\n  const book_slug  = j.book_slug ?? null;\n\n  // Optionally pass storage path metadata if you use it later\n  const key        = j.key ?? j.Key ?? j.objectPath ?? null;\n\n  return {\n    json: {\n      public_url,\n      index,\n      book_slug,\n      key\n    }\n    // no binary, no other metadata\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2192,
+        160
+      ],
+      "id": "2be2be8f-3bbe-4483-b97e-5888f82ebd14",
+      "name": "Delete Binary and Get URLs"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Expect one item whose json has { data: [ { public_url, index?, key?, book_slug? }, ... ], book_slug? }\n// Do NOT call $input.all() here.\n\nconst USER_INFO_NODE = \"User Information\";\nconst CLEAN_NODE     = \"Clean Text\";\n\nfunction slugify(s) {\n  return String(s || \"book\")\n    .replace(/\\.[^/.]+$/, \"\")\n    .toLowerCase()\n    .replace(/[_\\s]+/g, \"-\")\n    .replace(/[^a-z0-9-]/g, \"\")\n    .replace(/-+/g, \"-\")\n    .replace(/^-|-$/g, \"\");\n}\n\nconst rows = Array.isArray($json.data) ? $json.data : [];\nif (!rows.length) {\n  const uf = $node[USER_INFO_NODE]?.json?.file_name || \"\";\n  return [{ json: { book_slug: $json.book_slug || (uf && slugify(uf)) || \"book\", urls: [], listText: \"\" } }];\n}\n\n// Prefer book_slug from several sources; fall back to filename or parse from URL.\nfunction pickBookSlug() {\n  if ($json.book_slug) return String($json.book_slug);\n\n  const fromRow = rows.find(r => r.book_slug)?.book_slug;\n  if (fromRow) return String(fromRow);\n\n  const fromClean = $node[CLEAN_NODE]?.json?.book_slug;\n  if (fromClean) return String(fromClean);\n\n  // Parse from first URL: /object/(public/)?(audio_books|Books)/<slug>/\n  const firstUrl = String(rows[0]?.public_url || rows[0]?.url || \"\").replace(/[\\r\\n]+/g, \"\");\n  const m = firstUrl.match(/\\/object\\/(?:public\\/)?(?:audio_books|Books)\\/([^/]+)\\//i);\n  if (m) return m[1];\n\n  const fileName = $node[USER_INFO_NODE]?.json?.file_name || \"\";\n  if (fileName) return slugify(fileName);\n\n  const firstKey = rows[0]?.key ?? rows[0]?.Key ?? \"\";\n  if (firstKey) {\n    const parts = String(firstKey).split(\"/\");\n    if (parts.length > 1 && parts[1]) return String(parts[1]);\n  }\n  return \"book\";\n}\nconst book_slug = pickBookSlug();\n\n// Sort parts\nfunction partIndex(row) {\n  if (row.index != null) return Number(row.index);\n  const u = String(row.public_url || row.url || \"\");\n  let m = u.match(/part_(\\d+)\\.mp3/i);\n  if (!m) m = String(row.key || row.Key || \"\").match(/part_(\\d+)\\.mp3/i);\n  return m ? Number(m[1]) : 0;\n}\nrows.sort((a, b) => partIndex(a) - partIndex(b));\n\n// Clean URLs (strip newlines & accidental //) and build concat list\nconst urls = rows\n  .map(r => String(r.public_url || r.url || \"\"))\n  .map(u => u.replace(/[\\r\\n]+/g, \"\").replace(/([^:]\\/)\\/+/g, \"$1\").trim())\n  .filter(Boolean);\n\nconst listText = urls.map(u => `file '${u}'`).join(\"\\n\");\n\nreturn [{ json: { book_slug, urls, listText } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2176,
+        -16
+      ],
+      "id": "e28a137f-4ca9-435f-b38e-afec1c12578e",
+      "name": "Reshape Aggregate"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4f4d5424-a879-43e9-8df9-96952d824305",
+              "name": "public_url",
+              "value": "=https://YOUR_PROJECT.supabase.co/storage/v1/object/audio_books/{{ $('Clean Text').item.json.book_slug }}/{{ $('User Information').first().json.user_id }}/{{ $('User Information').first().json.upload_id }}/part_{{ $('Clean Text').item.json.index }}.mp3",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2352,
+        160
+      ],
+      "id": "176d8f51-a4ff-415b-946c-633f4fec47c6",
+      "name": "Public Urls"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api2.transloadit.com/assemblies",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "params",
+              "value": "={{ JSON.stringify({\n  auth: { key: 'YOUR_SECRET' },\n\n  fields: {\n    book_slug: $json.book_slug,\n    user_id: $json.user_id || $node[\"User Information\"].json.user_id,\n    upload_id: $json.upload_id || $node[\"User Information\"].json.upload_id\n  },\n\n  steps: {\n    import_parts: { robot: \"/http/import\", url: $json.urls },\n    order: { robot: \"/file/filter\", use: \"import_parts\", accept: \"audio/*\", sort_by: \"name\" },\n    to_wav: {\n      robot: \"/audio/encode\", use: \"order\",\n      ffmpeg_stack: \"v7.0.0\", audio_codec: \"pcm_s16le\",\n      audio_samplerate: 44100, audio_channels: 2, result: false\n    },\n    concat: {\n      robot: \"/audio/concat\",\n      use: { steps: [\"to_wav\"], bundle_steps: true },\n      ffmpeg_stack: \"v7.0.0\", result: true\n    },\n    mp3: {\n      robot: \"/audio/encode\", use: \"concat\",\n      ffmpeg_stack: \"v7.0.0\", audio_codec: \"libmp3lame\",\n      bitrate: 128000, audio_samplerate: 44100, audio_channels: 2, result: true\n    },\n\n    /* Store final into the private Books bucket root configured in credentials */\n    store_to_supabase: {\n      robot: \"/supabase/store\",\n      use: \"mp3\",\n      credentials: \"supabase-s3\",\n      path: \"${fields.book_slug}/${fields.user_id}/${fields.upload_id}/${fields.book_slug}.mp3\",\n      overwrite: false,\n      result: true\n    }\n  }\n}) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2352,
+        -16
+      ],
+      "id": "9890fe22-de7f-4750-96dc-50eb4c156742",
+      "name": "Transloadit"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.assembly_ssl_url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2512,
+        -16
+      ],
+      "id": "18b4afc9-5fee-4c59-9b3c-dd1e03fc8cce",
+      "name": "GET Assembly"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        -16
+      ],
+      "id": "34c0cf3c-71c5-4993-bd18-226e70dfe53d",
+      "name": "Wait",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "ASSEMBLY_COMPLETED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "00dfd6d7-ee86-4909-841f-6376e11a847e"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "21b4cd6d-c7ba-4f55-865e-e3d46c0eb2e7",
+                    "leftValue": "={{ $json.ok }}",
+                    "rightValue": "ASSEMBLY_EXECUTING",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        2784,
+        -16
+      ],
+      "id": "361724bd-ea41-4eef-adcd-c80b3a055024",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pick the result that contains storage info\nconst r = ($json.results?.store_to_supabase?.[0])\n       || ($json.results?.mp3?.[0])\n       || null;\n\nconst bucket = r?.bucket || 'Books'; // still private bucket\n\n// Collect fields (prefer those Transloadit echoed back)\nconst fields = $json.fields ?? {};\nconst bookSlug = fields.book_slug ?? $json.book_slug ?? 'book';\nconst userId   = fields.user_id   ?? $json.user_id   ?? null;\nconst uploadId = fields.upload_id ?? $json.upload_id ?? null;\n\n// Prefer Transloadit's own path when present\nlet objectPath = r?.path;\n\n// Fallback: construct path exactly like your Transloadit template\nif (!objectPath) {\n  if (userId && uploadId) {\n    // New structure with per-user & per-upload\n    objectPath = `${bookSlug}/${userId}/${uploadId}/${bookSlug}.mp3`;\n  } else {\n    // Old structure (pre-change) for backwards compatibility\n    objectPath = `${bookSlug}/${bookSlug}.mp3`;\n  }\n}\n\n// Normalize any accidental leading slashes from the response\nobjectPath = String(objectPath).replace(/^\\/+/, '');\n\n// Return compact metadata for downstream (signing URL, DB insert, etc.)\nreturn [{\n  book_slug: bookSlug,\n  user_id: userId,\n  upload_id: uploadId,\n  bucket,\n  objectPath\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        -32
+      ],
+      "id": "87693944-edb2-4a1d-bcc3-3d0dc5ceea77",
+      "name": "Bucket and Object Path"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR_PROJECT.supabase.co/storage/v1/object/sign/{{$json.bucket}}/{{$json.objectPath}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "apikey",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "expiresIn",
+              "value": "604800"
+            },
+            {
+              "name": "download",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3152,
+        -224
+      ],
+      "id": "03b9a68d-32e2-4715-a785-2b5906f9a65f",
+      "name": "Signed URL"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Inputs from previous node:\nconst bucket   = $json.bucket || 'Books';\nlet objectPath = String($json.objectPath || '').replace(/^\\/+/, '');\n\n// URL-safe encode each segment (handles spaces, parentheses, etc.)\nconst safePath = objectPath\n  .split('/')\n  .map(encodeURIComponent)\n  .join('/');\n\nconst PUBLIC_BASE =\n  'https://YOUR_PROJECT.supabase.co/storage/v1/object/public';\n\n// Final NEVER-expiring public URL\nconst url = `${PUBLIC_BASE}/${encodeURIComponent(bucket)}/${safePath}`;\n\nreturn [{\n  bucket,\n  objectPath,\n  url,                 // ← store this in DB\n  public: true,\n  expiresIn: null,     // no expiry\n  expiresAt: null,     // no expiry\n  user_id:   $json.user_id   ?? null,\n  upload_id: $json.upload_id ?? null,\n  book_slug: $json.book_slug ?? null\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        -32
+      ],
+      "id": "437ae4b3-9101-47a1-906e-fd1f0c955dc9",
+      "name": "Clean Payload"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3bcabd18-34e2-42e2-9ef7-09e2b43fc0a2",
+              "name": "upload_id",
+              "value": "={{ $('Webhook').item.json.body.upload_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8aaf4d84-a5b8-4bfc-9dfa-85b02b55d7f7",
+              "name": "user_id",
+              "value": "={{ $('Webhook').item.json.body.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "67795052-573e-4636-ace0-26531d85cab2",
+              "name": "email",
+              "value": "={{ $('Webhook').item.json.body.email }}",
+              "type": "string"
+            },
+            {
+              "id": "18932982-407d-4f1e-83a1-336d822fb7ef",
+              "name": "file_name",
+              "value": "={{ $('Webhook').item.json.body.file_name }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -64,
+        0
+      ],
+      "id": "34e7a084-e831-4b4b-990a-fa6416d9db71",
+      "name": "User Information"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "YOUR_TABLEID",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('User Information').first().json.upload_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "audio_url",
+              "fieldValue": "={{ $json.url }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3312,
+        -32
+      ],
+      "id": "1d1c592b-fb90-4ce3-a25f-a45e76a8dbc3",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Supabase Daily Puzzle App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"audioUrl\": \"{{ $json.audio_url }}\"\n}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        3488,
+        -32
+      ],
+      "id": "93548b98-84a4-41ac-b815-fd83eae54caf",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Names of upstream nodes (change only if your node labels differ)\nconst COMBINE_NODE = \"Combine\";\nconst FINAL_NODE   = \"Final Summary\";\n\n// Get combined text (unchanged)\nconst combined =\n  ($node[COMBINE_NODE]?.json?.combined ?? \"\").toString();\n\n// Get model’s Final Summary output\nlet finalSummary =\n  ($node[FINAL_NODE]?.json?.output ?? $json?.output ?? \"\").toString().trim();\n\n// Safety: if the model accidentally returned extra stuff, keep only the\n// section that begins with the heading “Final Summary”\nconst m = finalSummary.match(/(^|\\n)\\s*#{0,3}\\s*Final Summary[\\s\\S]*$/i);\nif (m) finalSummary = m[0].trim();\n\n// Build merged text\nconst merged = combined\n  + (finalSummary ? `\\n\\n${finalSummary}\\n` : \"\");\n\n// Emit\nreturn [{ json: { merged_text: merged } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        0
+      ],
+      "id": "3ee114c9-86a4-4487-a99e-1b326549c97c",
+      "name": "Text and Final Summary"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload a file": {
+      "main": [
+        [
+          {
+            "node": "User Information",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Info about file": {
+      "main": [
+        [
+          {
+            "node": "Page number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page number": {
+      "main": [
+        [
+          {
+            "node": "Creat Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Creat Chunks": {
+      "main": [
+        [
+          {
+            "node": "Convert to Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Text": {
+      "main": [
+        [
+          {
+            "node": "Summarize Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Summarize Chunks",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Final Summary",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Chunks": {
+      "main": [
+        [
+          {
+            "node": "Combine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine": {
+      "main": [
+        [
+          {
+            "node": "Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Summary": {
+      "main": [
+        [
+          {
+            "node": "Text and Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Text": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eleven Labs TTS": {
+      "main": [
+        []
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Reshape Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate audio": {
+      "main": [
+        [
+          {
+            "node": "Upload to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Delete Binary and Get URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Binary and Get URLs": {
+      "main": [
+        [
+          {
+            "node": "Public Urls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Public Urls": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reshape Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Transloadit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transloadit": {
+      "main": [
+        [
+          {
+            "node": "GET Assembly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Assembly": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Bucket and Object Path",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GET Assembly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bucket and Object Path": {
+      "main": [
+        [
+          {
+            "node": "Clean Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signed URL": {
+      "main": [
+        []
+      ]
+    },
+    "User Information": {
+      "main": [
+        [
+          {
+            "node": "Get Info about file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Payload": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "Update a row": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text and Final Summary": {
+      "main": [
+        [
+          {
+            "node": "Clean Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4e1cfe57-40f6-4be3-9bc3-bf61364cdeb6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "irtlkRNpn42ay8QB",
+  "tags": []
+}

@@ -1,0 +1,301 @@
+{
+  "name": "Calorie Calculator Application",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR_PROJECT.supabase.co/storage/v1/object/customerData/{{ $json.body.user_id }}/{{ new Date().toISOString().slice(0,10) }}/image_{{ Date.now() }}.jpg",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "apikey",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/jpeg"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        0
+      ],
+      "id": "db9dc61f-daf8-45f2-a146-1f0ee7112cd0",
+      "name": "Supabase"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "44e4afc6-7806-46c3-96a1-fc07f4ae1ea9",
+              "name": "image_url",
+              "value": "=https://YOUR_PROJECT.supabase.co/storage/v1/object/{{ $json.Key }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        16,
+        0
+      ],
+      "id": "71487077-d94d-456a-88df-15ff42e029c1",
+      "name": "Public URL"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-pro",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-pro"
+        },
+        "text": "You are an AI nutrition assistant used in a calorie-calculator app.\nYou always receive one image, and your job is to analyze it strictly, literally, and accurately.\nReturn ONLY raw JSON. No markdown. No code fences. No backticks. No explanations.\n\n==================================================\n1. DETECT IF THE IMAGE CONTAINS ANY EDIBLE FOOD OR DRINK\n==================================================\n• Determine whether the image contains clearly identifiable, edible food or drink.\n• Do NOT classify the following as food:\n  – raw leaves, herbs, plants, flowers, tree branches\n  – kitchen tools (knife, cutting board, stove, pans, containers)\n  – packaging, bags, boxes\n  – random objects or backgrounds\n• Only consider something “food” if it is obviously edible.\n\nIf NO edible food or drink is present:\nReturn ONLY:\n{\n  \"hasFood\": false,\n  \"items\": [],\n  \"total_calories_kcal\": 0,\n  \"total_protein_g\": 0,\n  \"total_carbs_g\": 0,\n  \"total_fat_g\": 0,\n  \"overall_notes\": \"No food or drink detected in this image.\"\n}\nSTOP.\n\n==================================================\n2. IDENTIFY FOODS (IF FOOD IS PRESENT)\n==================================================\nIf edible food is visible:\n• Identify each major, visually distinct edible item (max 10).\n• Use short, simple food names (no brands).\n• Ignore tiny garnishes unless they meaningfully affect calories.\n\n==================================================\n3. RAW INGREDIENTS LOGIC (IMPORTANT)\n==================================================\nIf the image shows raw ingredients (cutting board, countertop, bowls):\n• Do NOT assume it is a full meal.\n• Use small, literal portions that match what is visible.\n• Add to overall_notes: \"(raw ingredients only, not a complete dish)\".\n\n==================================================\n4. ESTIMATE PORTIONS\n==================================================\nUse normalized portions:\n• grams (g) for solids  \n• milliliters (ml) for liquids  \n• cups, tablespoons, slices, pieces  \n• “1 medium apple”, etc.\n\nIf unsure, choose the most typical portion size for that food.\n\n==================================================\n5. ESTIMATE CALORIES AND MACROS\n==================================================\nFor each item provide:\n• estimated_calories_kcal (fixed number)\n• estimated_protein_g\n• estimated_carbs_g\n• estimated_fat_g\n\nInclude calories from:\n• sauces, dressings, cheese, frying oil, butter, cream, mayo.\n\nIf uncertain:\nAdd a calorie range to notes:\n\"Estimated range: 80–120 kcal depending on oil and portion size.\"\n\n==================================================\nIMPORTANT RULE — NO WHOLE DISH INSIDE \"items\"\n==================================================\nIf the image is a combined dish (salad, bowl, plate, curry, pasta, wrap, burger, etc.):\n\n• Compute TOTALS based on the whole dish.\n• BUT inside \"items\", list ONLY the individual ingredients/components you can visually identify.\n\nDO NOT include the main dish name inside \"items\".\nYou must NOT output items like:\n• \"Shrimp Salad\"\n• \"Chicken Bowl\"\n• \"Burger\"\n• \"Pasta Alfredo\"\n• \"Steak Plate\"\n\n\"items\" must include ONLY components such as:\n• shrimp, chicken, rice, avocado, fries, vegetables, dressing, sauce, cheese, etc.\n\n==================================================\n6. SUMMARIZE TOTALS\n==================================================\nAfter listing ingredient-level items:\nCompute totals across ALL items:\n• total_calories_kcal\n• total_protein_g\n• total_carbs_g\n• total_fat_g\n\nThese totals represent the entire dish.\n\n==================================================\n7. EXTRA CALORIE LOGIC\n==================================================\nBe especially careful with:\n• oil, frying fat, butter, cheese, cream, nuts, mayo.\n\nIf present, prioritize them because they dramatically change calories.\n\nGarnishes <5 kcal may be ignored.\n\n==================================================\n8. CONFIDENCE & NOTES\n==================================================\nEach item must include:\n• confidence: \"high\" | \"medium\" | \"low\"\n• notes: uncertainties, assumptions, ranges (optional)\n\nAdd “overall_notes” summarizing major uncertainties.\n\n==================================================\n9. OUTPUT FORMAT (STRICT RAW JSON)\n==================================================\nReturn ONLY pure JSON.  \nNo markdown.  \nNo code fences.  \nNo backticks.  \nNo explanations.\n\nIf food IS present:\n{\n  \"hasFood\": true,\n  \"items\": [\n    {\n      \"name\": \"ingredient_or_component\",\n      \"estimated_portion\": \"string\",\n      \"estimated_calories_kcal\": 0,\n      \"estimated_protein_g\": 0,\n      \"estimated_carbs_g\": 0,\n      \"estimated_fat_g\": 0,\n      \"confidence\": \"high | medium | low\",\n      \"notes\": \"optional\"\n    }\n  ],\n  \"total_calories_kcal\": 0,\n  \"total_protein_g\": 0,\n  \"total_carbs_g\": 0,\n  \"total_fat_g\": 0,\n  \"overall_notes\": \"string\"\n}\n\nIf NO food:\n{\n  \"hasFood\": false,\n  \"items\": [],\n  \"total_calories_kcal\": 0,\n  \"total_protein_g\": 0,\n  \"total_carbs_g\": 0,\n  \"total_fat_g\": 0,\n  \"overall_notes\": \"No food or drink detected in this image.\"\n}",
+        "imageUrls": "={{ $json.image_url }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        176,
+        0
+      ],
+      "id": "1e30a2f4-66d3-4edb-9a7b-e1aca0859a32",
+      "name": "Analyze an image",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_ID",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -288,
+        0
+      ],
+      "id": "de00cd6d-a8ed-467e-906e-89997345d75a",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1) Get user/body info from the Webhook node\nconst webhookItem = $items('Webhook')[0].json;\nconst body = webhookItem.body; // contains user_id, etc.\n\n// 2) Get the model output from \"Analyze an image\"\nconst aiItem = $items('Analyze an image')[0].json;\n\n// Gemini output: JSON is inside content.parts[0].text\nconst rawText = aiItem.content.parts[0].text;\n\n// Remove ```json ... ``` wrapper\nconst jsonText = rawText\n  .replace(/^```json\\s*/m, '')\n  .replace(/```$/m, '')\n  .trim();\n\n// Parse into object\nconst result = JSON.parse(jsonText);\n\n// 3) Build the meal row (NO IMAGE URL HERE)\nconst mealRow = {\n  user_id: body.user_id,\n  eaten_at: new Date().toISOString().slice(0, 10), // YYYY-MM-DD\n  calories_kcal: result.total_calories_kcal ?? null,\n  protein_g: result.total_protein_g ?? null,\n  carbs_g: result.total_carbs_g ?? null,\n  fat_g: result.total_fat_g ?? null,\n};\n\n// 4) Return what DB needs + full breakdown for the app\nreturn [\n  {\n    json: {\n      meal: mealRow,       // Insert into Supabase\n      breakdown: result,   // Show to user on analysis screen\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ],
+      "id": "4fd1551f-2a4e-4733-9e86-969d7b5f99b6",
+      "name": "DB Data"
+    },
+    {
+      "parameters": {
+        "tableId": "YOUR_TABLEID",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "user_id",
+              "fieldValue": "={{ $('Webhook').item.json.body.user_id }}"
+            },
+            {
+              "fieldId": "eaten_at",
+              "fieldValue": "={{ $json.meal.eaten_at }}"
+            },
+            {
+              "fieldId": "image_url",
+              "fieldValue": "={{ $('Public URL').item.json.image_url }}"
+            },
+            {
+              "fieldId": "calories_kcal",
+              "fieldValue": "={{ $json.meal.calories_kcal }}"
+            },
+            {
+              "fieldId": "protein_g",
+              "fieldValue": "={{ $json.meal.protein_g }}"
+            },
+            {
+              "fieldId": "carbs_g",
+              "fieldValue": "={{ $json.meal.carbs_g }}"
+            },
+            {
+              "fieldId": "fat_g",
+              "fieldValue": "={{ $json.meal.fat_g }}"
+            },
+            {
+              "fieldId": "meal_tag",
+              "fieldValue": "={{ $('Webhook').item.json.body.meal_tag }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        464,
+        0
+      ],
+      "id": "5ecc9878-1b2c-42a9-9515-bf2f8e09364b",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Supabase CalTrack"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        768,
+        0
+      ],
+      "id": "73e8f78d-0bc3-4f0d-9b26-2805995241d1",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This node will output exactly the JSON we want to send to the app\n\nconst meal = $('Create a row').item.json;\nconst dbData = $('DB Data').item.json;\n\nreturn [\n  {\n    json: {\n      meal: {\n        user_id: meal.user_id,\n        eaten_at: meal.eaten_at,\n        image_url: meal.image_url,\n        calories_kcal: meal.calories_kcal,\n        protein_g: meal.protein_g,\n        carbs_g: meal.carbs_g,\n        fat_g: meal.fat_g,\n        meal_tag: meal.meal_tag,\n      },\n      breakdown: dbData.breakdown,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "aaa83c08-724d-4767-aef3-d21a88eda0cf",
+      "name": "Required Format"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Supabase": {
+      "main": [
+        [
+          {
+            "node": "Public URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Public URL": {
+      "main": [
+        [
+          {
+            "node": "Analyze an image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze an image": {
+      "main": [
+        [
+          {
+            "node": "DB Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB Data": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Required Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Required Format": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Etc/UTC",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "9e9abe4a-e67b-4f56-b3dc-f4a5d89cbb93",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "hQ9QzJVtLaADrobc",
+  "tags": []
+}

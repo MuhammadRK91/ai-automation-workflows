@@ -1,0 +1,487 @@
+{
+  "name": "System 3 - n8n",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        16
+      ],
+      "id": "a350767e-1d37-44f8-8fc5-7d714d495cbb",
+      "name": "When clicking ‘Test workflow’"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "02c189d5-d7d7-40b1-a8d9-a0ca8be2e5f2",
+              "leftValue": "={{ $json.companyName }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "37d59815-95ea-4a00-a825-6a876a64cd5a",
+              "leftValue": "={{ $json.fullName }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        -672,
+        16
+      ],
+      "id": "c911b682-f11d-4f11-8772-623c1e0c2149",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -496,
+        16
+      ],
+      "id": "af846f48-1efd-413d-9276-2fdb4db9caef",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.instantly.ai/api/v2/leads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "campaign",
+              "value": "YOUR_VALUE"
+            },
+            {
+              "name": "email",
+              "value": "={{ $('Find emails').item.json.results.email }}"
+            },
+            {
+              "name": " last_name",
+              "value": "={{ $('Set First Name and Last Name').item.json.lastName }}"
+            },
+            {
+              "name": "first_name",
+              "value": "={{ $('Set First Name and Last Name').item.json.firstName }}"
+            },
+            {
+              "name": "company_name",
+              "value": "={{ $('Get Leads').item.json.companyName }}"
+            },
+            {
+              "name": "skip_if_in_workspace",
+              "value": "true"
+            },
+            {
+              "name": "skip_if_in_campaign",
+              "value": "true"
+            },
+            {
+              "name": "skip_if_in_list",
+              "value": "true"
+            },
+            {
+              "name": "verify_leads_for_lead_finder",
+              "value": "false"
+            },
+            {
+              "name": "verify_leads_on_import",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        -112
+      ],
+      "id": "ba3ce999-5849-4a16-8c40-c2ca660c5ac6",
+      "name": "Add Leads to Instantly",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anymailfinder.com/v5.0/search/person.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "YOUR_VALUE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={   \"company_name\": \"{{ $('Get Leads').item.json.companyName }}\",   \"full_name\": \"{{ $('Format Name').item.json.message.content }}\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        160,
+        -176
+      ],
+      "id": "e50f5cd9-18ce-4ef6-a34a-a92ebba3d2c1",
+      "name": "Find emails",
+      "retryOnFail": false,
+      "notesInFlow": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.1-2025-11-13",
+          "mode": "list",
+          "cachedResultName": "GPT-5.1-2025-11-13"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are a Name Normalization Model.\nYour task is to take a person’s full name (often copied from LinkedIn) and return a clean, plain-English human name.\n\nInputs may include emojis, symbols, corrupted characters, degrees, job titles, extra punctuation, or bracketed descriptions.\nYour output must always be a natural, readable name containing only the real first and last name(s).\n\nRULES\n\nRemove all emojis, symbols, and decorative characters.\nExamples: ⭐, 💬, ™, ®, ✨, random punctuation, corrupted Unicode.\n\nRemove professional titles, degrees, and roles.\nExamples: MSc, MSW, PT, PhD, PhDc, Founder, CEO, Interim CMO.\n\nRemove everything inside parentheses or brackets if it is a nickname, joke, or descriptor.\nExamples: (Sherri), (Master Problem Solver).\n\nFix corrupted accented characters by converting them to the nearest English equivalent.\nExamples: Ã© → e, Ä— → e, Ãº → u, Ã­ → i.\n\nRemove trailing punctuation, excessive spaces, stray hyphens, and formatting noise.\n\nPreserve real multi-part surnames, but remove corrupted segments.\nExample: Cantor -RÃ©rolle → Cantor.\n\nIf the surname becomes corrupted beyond repair, keep only the clean portion.\n\nOutput only the cleaned name (no explanation, no extra text).\n\nEXAMPLES\n\nInput → Output\n\n• Kitti Majorán, MSc → Kitti Majorán\n• Zennor Robinson 💬 → Zennor Robinson\n• Johnny J Pawlik – Founder, Conference Speaker, Interim CMO → Johnny Pawlik\n• Carl W. → Carl W\n• Corinne Cantor -RÃ©rolle → Corinne Cantor\n• Maegan McConnell,MSW, MSc, PhDc → Maegan McConnell\n• Karina NoemÃ­-Flores GarcÃ­a → Karina Noemi\n• Benjamin Emmert-Aronson → Benjamin Emmert\n• Milda UlpytÄ— → Milda Ulpyte\n• Sonia LÃ³pezZÃºÃ±iga → Sonia\n• (Sherri)Renee Hart → Renee Hart\n• Lindsey (Master Problem Solver) Patterson → Lindsey Patterson\n• Jose Buco, PT → Jose Buco\n\nFINAL OUTPUT REQUIREMENT\n\nReturn only the cleaned human name — no comments, no reasoning, no additional text.",
+              "role": "system"
+            },
+            {
+              "content": "=format the following name: {{ $json.fullName }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -272,
+        -176
+      ],
+      "id": "066c077c-9ece-4d7e-a665-ede5bc8add4c",
+      "name": "Format Name",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst openAIData = $(\"Format Name\").all();\n\nconst updatedItems = items.map((item, index) => {\n  const fullName = openAIData[index]?.json?.message?.content;\n  const [firstName, lastName] = fullName.split(\" \");\n  item.json.firstName = firstName;\n  item.json.lastName = lastName;\n  return item;\n});\n\nreturn updatedItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -176
+      ],
+      "id": "7be73e9a-030a-4f1a-97ed-8eded55decc6",
+      "name": "Set First Name and Last Name"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6d6154e4-4ea2-4d27-9718-1e933c294c17",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "c4c584cd-b243-46c9-814f-1ac69efc6dce",
+              "leftValue": "={{ $json.results.validation }}",
+              "rightValue": "valid",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        336,
+        -192
+      ],
+      "id": "e960c927-4c32-4cd8-b3ab-dabd97c67722",
+      "name": "Check Valid Email"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.1",
+          "mode": "list",
+          "cachedResultName": "GPT-5.1"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={\n  \"fullName\": \"{{ $('Format Name').item.json.message.content }}\",\n  \"companyName\": \"{{ $('Get Leads').item.json.companyName }}\",\n  \"title\": \"{{ $('Get Leads').item.json.title }}\",\n  \"summary\": \"{{ $('Get Leads').item.json.summary }}\",\n  \"titleDescription\": \"{{ $('Get Leads').item.json.titleDescription }}\"\n}"
+            },
+            {
+              "content": "You are an expert, intelligent writer who creates short, personalized icebreakers for cold emails.\n\nYour task:\n- Use the provided LinkedIn profile fields to write a concise, precise, and natural one-sentence personalized icebreaker.\n- Personalization must come mainly from the “summary” and “titleDescription” fields.\n- If both fields have valuable information, blend them naturally.  \n- If one of them is empty, use the other.  \n- If both are empty, skip personalization and only greet using the name.\n\nTone:\n- Sound natural, human, and sincere—never robotic.\n- Use very simple everyday words.\n- Do not use complex words or fancy language.\n- Do not act like a fan. Avoid words such as “astonishing”, “incredible”, “really impressed”, “astounded”, etc.\n- Do not ask any questions.\n- Do not mention shared locations.\n- Always avoid contractions. Use “it is”, “you are”, “you have” instead of “it’s”, “you’re”, “you’ve”.\n\nFormatting:\n- Output MUST be in JSON.\n- Icebreaker MUST be **one sentence only**.\n- Always start with a greeting using the first name (ex: “Dear Mindaugas,” or “Hi Sarah,”).\n- After the greeting, add a **line break**, then start the sentence.\n- Capitalize the first letter of the sentence after the line break.\n- No extra lines, no extra commentary.\n\nExamples (improved):\n\nInput:\n{\n  \"fullname\": \"Mindaugas Zukauskas\",\n  \"companyName\": \"Avant Skincare\",\n  \"summary\": \"Strong foundation in new product development, creative packaging design, commercial art, conceptions, and computer applications complemented by knowledge of business operations and the need for customer-focused service.Track record of initiative and achievement — outsourcing and managing projects with freelancers, expanding job description boundaries and being selected for positions of responsibility within chosen field.\",\n  \"titleDescription\": \"\",\n  \"title\": \"Director of Operations & NPD\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Dear Mindaugas,\\nYour background in product development and creative project management shows a steady blend of practical skill and thoughtful problem solving.\"\n}\n\nInput:\n{\n  \"fullname\": \"Karl-Arne Kronstra\",\n  \"companyName\": \"Egyptian Magic Skin Cream\",\n  \"summary\": \"As the owner and key account manager of Egyptian Magic European Distribution ApS, I am passionate about providing a natural and professional skin care product that nurtures skin with nature's most effective ingredients. I have over 13 years of experience in operating my own business, developing sales strategies, managing client accounts, and overseeing distribution logistics in the European market.Throughout my career, I have established contact with some of Europe's largest retailers and together we have sold nearly one million units of a one SKU brand. I have also acquired multiple certifications in sales management, sales team building, and strategic thinking from LinkedIn. I am always open to connect with people from all walks of life and share my insights and expertise in the beauty industry.\",\n  \"titleDescription\": \"\",\n  \"title\": \"Owner, Key Account Manager\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Hi Karl,\\nYour long experience in natural skincare and your work in building strong retailer relationships show a steady commitment to growing a meaningful brand.\"\n}\n\nInput:\n{\n  \"fullname\": \"Kory Wirawan\",\n  \"companyName\": \"Aussie Steel Direct\",\n  \"summary\": \"Bachelor of Commerce graduate with a double major in Marketing and Management, equipped with hands-on experience in both sales and marketing domains. Demonstrated success in driving revenue growth and executing effective marketing strategies. Prior roles have honed my skills in client relations, strategic planning, and campaign management. Known for my drive, initiative, and ability to consistently deliver impactful results. Open to opportunities where I can contribute my expertise and continue to excel in the dynamic field of marketing and sales.\",\n  \"titleDescription\": \"\",\n  \"title\": \"Co-Founder - Sales Director\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Dear Kory,\\nYour mix of marketing and management experience, along with your hands-on work in driving sales growth, shows a clear comfort with both strategy and execution.\"\n}\n\nInput:\n{\n  \"fullname\": \"Sarah Mueller\",\n  \"companyName\": \"Johnson & Johnson\",\n  \"summary\": \"\",\n  \"titleDescription\": \"Managing Director MedTech Switzerland\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Hi Sarah,\\nYour leadership in MedTech reflects a strong focus on guiding teams and driving meaningful progress in healthcare.\"\n}\n\nInput:\n{\n  \"fullname\": \"Grace Nkubito\",\n  \"companyName\": \"Clinique de la Grace\",\n  \"summary\": \"\",\n  \"titleDescription\": \"I am an experienced Public Health Specialist with vast experience in the management of Community Health programs including Orphan and Vulnerable Children; Sexual Reproductive Health and Rights among the Youth, and Adolescent Girls and Young Women programs (DREAMS), HIV and Tuberculosis. I also have financial management skills having managed Global Fund Grant to fight AIDS, Tuberculosis and Malaria. I am also an experienced clinician with advanced clinical and surgical skills.\",\n  \"title\": \"Managing Director\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Hi Grace,\\nYour work in community health and your clinical background show a strong commitment to supporting people through essential care programs.\"\n}\n\nInput:\n{\n  \"fullname\": \"Florent Roulet\",\n  \"companyName\": \"Bryan, Garnier & Co\",\n  \"summary\": \"\",\n  \"titleDescription\": \"Partner\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Dear Florent,\\nYour role as a partner reflects a strong foundation in guiding important decisions and supporting long-term business growth.\"\n}\n\nInput:\n{\n  \"fullname\": \"Sebastian Brendle\",\n  \"companyName\": \"Johnson & Johnson\",\n  \"summary\": \"Expert in Supply Chain Management - from procurement, to production planning to sales and after sales management - besides the knowledge of a Master degree at the KIT also based on diverse practical experience.\",\n  \"titleDescription\": \"Defining and managing of site production plans and coordination along global supply chain as brand owner. Managing inventory levels on site and within global supply network. Assessment and support of supply and market requirement changes and analyzing capacity requirements for production equipment and production lines.\",\n  \"title\": \"Master Supply Planner and Local Brand Owner\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Hi Sebastian,\\nYour hands-on experience across supply chain planning and global coordination highlights your skill in keeping operations steady and well aligned.\"\n}\n\nInput:\n{\n  \"fullname\": \"Adetayo Adegbola\",\n  \"companyName\": \"Lush Meadows Services\",\n  \"summary\": \"I am a chartered accountant with twelve years of experience in commercial banking with expertise in customer and relationship management, sales, data analytics, banking operations, financial analysis, and credit administration.\",\n  \"titleDescription\": \"Provide financial advisory and data analysis services to small and medium size businesses to manage their business process leading to increased productivity. Install and train small business owners on the use of software and digital platforms for managing their day-to-day accounting process. Developed and sold over 300 Excel templates and dashboards to small business to manage their data resulting in improved revenue.\",\n  \"title\": \"Co-Founder/Consultant\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Dear Adetayo,\\nYour experience in accounting and your work in helping small businesses manage their numbers show a steady dedication to practical financial support.\"\n}\n\nInput:\n{\n  \"fullname\": \"Magdalene Pietrzyk\",\n  \"companyName\": \"Medical Spa Clinique\",\n  \"summary\": \"\",\n  \"titleDescription\": \"With more than twenty-five years experience working in cosmetic, aesthetic and women’s health I now lead a team of expert laser practitioners, dentists, doctors and gynaecologists to provide a super-premium range of services. My clinic focuses on non-invasive and technology-driven treatments.\",\n  \"title\": \"Founder and CEO\"\n}\n\nOutput:\n{\n  \"icebreaker\": \"Hi Magdalene,\\nYour long experience in cosmetic and women’s health, along with your focus on non-invasive care, shows a clear dedication to offering safe and thoughtful treatments.\"\n}\n",
+              "role": "system"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "maxTokens": 256,
+          "temperature": 1,
+          "topP": 1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        640,
+        -448
+      ],
+      "id": "74c3437b-4e71-462e-829c-cb6593f85dfc",
+      "name": "Create IceBreaker",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_DOCUMENTID",
+          "mode": "list",
+          "cachedResultName": "real-estate-uk",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -816,
+        16
+      ],
+      "id": "158b040b-7e47-4fd7-8393-1fa7b0f85054",
+      "name": "Get Leads",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Format Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find emails": {
+      "main": [
+        [
+          {
+            "node": "Check Valid Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Leads to Instantly": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Name": {
+      "main": [
+        [
+          {
+            "node": "Set First Name and Last Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set First Name and Last Name": {
+      "main": [
+        [
+          {
+            "node": "Find emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Valid Email": {
+      "main": [
+        [
+          {
+            "node": "Add Leads to Instantly",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create IceBreaker": {
+      "main": [
+        []
+      ]
+    },
+    "Get Leads": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "660e12fa-05f5-4a4e-b68d-8ba76bc2bced",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "ZkQDUKM0mxgyMOki",
+  "tags": []
+}

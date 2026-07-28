@@ -42,8 +42,9 @@ SECRET_KEY = re.compile(
 # Identifiers that point at one specific account's resources. Not secret, but
 # meaningless to anyone else and a small privacy leak.
 RESOURCE_ID_KEY = re.compile(
-    r"^(?:document|sheet|spreadsheet|folder|drive|file|calendar|database|table|base|"
-    r"project|team|channel|chat)[_-]?id$",
+    r"^(?:(?:document|sheet|spreadsheet|folder|drive|file|calendar|database|table|base|"
+    r"project|team|channel|chat)[_-]?id"
+    r"|(?:campaign|workspace|audience|segment|mailbox)(?:[_-]?id)?)$",
     re.IGNORECASE,
 )
 
@@ -53,11 +54,41 @@ RESOURCE_ID_KEY = re.compile(
 # so ordinary file paths in other node types are left alone.
 WEBHOOK_ID_KEY = re.compile(r"^(?:webhook[_-]?id|path)$", re.IGNORECASE)
 
+# Account numbers and personal contact details. Not credentials, but they identify
+# a real person or a real billing account and do not belong in a public repo.
+# Values that are template references ({{3.record.phone}}) are left alone — those
+# are wiring, not data.
+ACCOUNT_KEY = re.compile(
+    r"^(?:tcsaccount|account_?(?:no|number)|customer_?(?:no|id)|mobile|phone|msisdn|contact_?no)$",
+    re.IGNORECASE,
+)
+TEMPLATE = re.compile(r"\{\{|^\s*$")
+
 UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 # --- pass 2: value shapes, wherever they appear -----------------------------
 
 PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
+    # Secrets passed as URL query parameters. A token in a query string is still a
+    # token, and this is the shape that most often survives a key-name-based pass.
+    ("query-string secret",
+     re.compile(r"([?&](?:access_?token|api_?key|auth|key|token|secret|password|signature)=)(?!YOUR_)[^&\"'\s}]+", re.IGNORECASE),
+     r"\1YOUR_TOKEN"),
+    # Credentials inside a JSON blob that is itself stored as a string, which is how
+    # Make stores request bodies. Templates ({{...}}) are left alone — they are
+    # references to earlier modules, not data.
+    ("embedded JSON secret",
+     re.compile(r"(\"(?:access_?token|api_?key|token|secret|password|client_?secret|tcsaccount|account_?no|mobile|phone)\"\s*:\s*\")(?!\{\{|YOUR_)[^\"]+(\")", re.IGNORECASE),
+     r"\1YOUR_VALUE\2"),
+    # Same idea as the structural pass, but for request bodies that are NOT valid
+    # JSON — Make templates like {{5.total}} appear unquoted, so json.loads refuses
+    # them and the only way in is the escaped text.
+    ("escaped JSON secret",
+     re.compile(r"(\\\"(?:access_?token|api_?key|token|secret|password|client_?secret|tcsaccount|account_?no|mobile|phone)\\\"\s*:\s*\\\")(?!\{\{|YOUR_)([^\\\"]+)(\\\")", re.IGNORECASE),
+     r"\1YOUR_VALUE\3"),
+    ("Cal.com key",       re.compile(r"cal_(?:live|test)_[A-Za-z0-9]{16,}"), "YOUR_CALCOM_API_KEY"),
+    # ElevenLabs uses sk_ with an underscore, unlike OpenAI's sk- with a hyphen.
+    ("ElevenLabs key",    re.compile(r"\bsk_[A-Za-z0-9]{32,}"), "YOUR_ELEVENLABS_API_KEY"),
     ("JWT / Supabase key", re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"), "YOUR_JWT"),
     ("OpenAI key",         re.compile(r"sk-[A-Za-z0-9_-]{20,}"), "YOUR_OPENAI_API_KEY"),
     ("Anthropic key",      re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"), "YOUR_ANTHROPIC_API_KEY"),
@@ -72,6 +103,15 @@ PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     ("email address",      re.compile(r"\b[A-Za-z0-9._%+-]+@(?!example\.com)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "you@example.com"),
 ]
 
+# Public vendor API endpoints. Keeping them is the point — they document the stack —
+# so they are excluded from the residual report to keep it worth reading.
+VENDOR_HOSTS = re.compile(
+    r"^https?://(?:api[0-9]*\.)?(?:elevenlabs\.io|transloadit\.com|anymailfinder\.com|"
+    r"instantly\.ai|cal\.com|openai\.com|anthropic\.com|tcscourier\.com|googleapis\.com|"
+    r"docs\.google\.com|ociconnect\.tcscourier\.com)",
+    re.IGNORECASE,
+)
+
 # Shapes that survive redaction and are worth a second look by a human.
 RESIDUAL = [
     ("long opaque string", re.compile(r"\b[A-Za-z0-9_-]{32,}\b")),
@@ -82,9 +122,47 @@ RESIDUAL = [
 PLACEHOLDER = "YOUR_VALUE"
 
 
-def walk(node, counts: Counter):
+def embedded_json(value: str):
+    """Return the parsed object if this string is itself a JSON document."""
+    s = value.lstrip()
+    if not s.startswith(("{", "[")):
+        return None
+    try:
+        parsed = json.loads(value)
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, (dict, list)) else None
+
+
+def walk(node, counts: Counter, parent_key: str = ""):
     """Pass 1 — replace values by key name, in place."""
     if isinstance(node, dict):
+        # n8n resource locator: {"__rl": true, "value": "<real id>", "mode": "list",
+        # "cachedResultName": "My Sheet", "cachedResultUrl": "https://..."}. The leaf
+        # key is "value", so a key-name match on the parent is the only way to catch it.
+        if node.get("__rl"):
+            if RESOURCE_ID_KEY.match(parent_key or "") and isinstance(node.get("value"), str) and node["value"]:
+                node["value"] = f"YOUR_{parent_key.upper()}"
+                counts[f"resource locator '{parent_key}'"] += 1
+            # A cached URL always embeds the real resource id, whatever the parent
+            # key is called — sheetName.cachedResultUrl leaks the spreadsheet id
+            # just as documentId.cachedResultUrl does.
+            if node.get("cachedResultUrl"):
+                node["cachedResultUrl"] = "YOUR_RESOURCE_URL"
+                counts["cachedResultUrl"] += 1
+
+        # n8n HTTP nodes carry headers and body fields as {"name": ..., "value": ...}
+        # pairs, so the meaningful key sits in a sibling rather than above the value.
+        # Expressions (leading "=") and templates are wiring, not data.
+        pname = node.get("name")
+        pval = node.get("value")
+        if isinstance(pname, str) and isinstance(pval, str) and pval and not pval.startswith(("=", "YOUR_")) \
+                and not TEMPLATE.search(pval):
+            label = pname.strip()
+            if SECRET_KEY.search(label) or RESOURCE_ID_KEY.match(label) or ACCOUNT_KEY.match(label):
+                node["value"] = PLACEHOLDER
+                counts[f"parameter '{label}'"] += 1
+
         for key, value in list(node.items()):
             # n8n credential block: {"openAiApi": {"id": "...", "name": "OpenAi account"}}
             if key == "credentials" and isinstance(value, dict):
@@ -92,13 +170,26 @@ def walk(node, counts: Counter):
                     if isinstance(cred, dict) and "id" in cred:
                         cred["id"] = "YOUR_CREDENTIAL_ID"
                         counts["credential id"] += 1
-                walk(value, counts)
+                walk(value, counts, key)
             elif isinstance(value, (dict, list)):
-                walk(value, counts)
+                walk(value, counts, key)
+            elif isinstance(value, str) and embedded_json(value) is not None:
+                # Make stores request bodies as a JSON document inside a string.
+                # Walking the parsed form is far more reliable than pattern-matching
+                # the escaped text, where every quote arrives as \" instead of ".
+                inner = embedded_json(value)
+                before = json.dumps(inner, sort_keys=True)
+                walk(inner, counts, key)
+                if json.dumps(inner, sort_keys=True) != before:
+                    node[key] = json.dumps(inner, indent=2, ensure_ascii=False)
+                    counts["embedded JSON body"] += 1
             elif isinstance(value, str) and value:
                 if SECRET_KEY.search(key):
                     node[key] = PLACEHOLDER
                     counts[f"key '{key}'"] += 1
+                elif ACCOUNT_KEY.match(key) and not TEMPLATE.search(value):
+                    node[key] = PLACEHOLDER
+                    counts[f"key '{key}' (account / contact)"] += 1
                 elif WEBHOOK_ID_KEY.match(key) and UUID.match(value):
                     node[key] = "YOUR_WEBHOOK_ID"
                     counts[f"key '{key}' (webhook path)"] += 1
@@ -107,7 +198,7 @@ def walk(node, counts: Counter):
                     counts[f"key '{key}'"] += 1
     elif isinstance(node, list):
         for item in node:
-            walk(item, counts)
+            walk(item, counts, parent_key)
 
 
 def scrub_text(text: str, counts: Counter) -> str:
@@ -119,11 +210,37 @@ def scrub_text(text: str, counts: Counter) -> str:
     return text
 
 
-def residual_report(text: str) -> list[str]:
+def node_ids(data) -> set[str]:
+    """Internal identifiers: nodes, filter conditions, Set assignments, versionId.
+
+    These are structural — n8n generates them and they unlock nothing. Reporting
+    them buries the findings that matter under dozens of lines of noise, which is
+    how a security report gets ignored. Only UUID-shaped values are collected, so
+    a credential stored under a key called `id` is still reported.
+    """
+    ids: set[str] = set()
+
+    def collect(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in ("id", "versionId", "instanceId") and isinstance(value, str) and UUID.match(value):
+                    ids.add(value)
+                else:
+                    collect(value)
+        elif isinstance(node, list):
+            for item in node:
+                collect(item)
+
+    collect(data)
+    return ids
+
+
+def residual_report(text: str, benign: set[str]) -> list[str]:
     findings = []
     for label, pattern in RESIDUAL:
         hits = {m.group(0) for m in pattern.finditer(text)}
-        hits = {h for h in hits if not h.startswith("YOUR_")}
+        hits = {h for h in hits if not h.startswith("YOUR_") and h not in benign
+                and not VENDOR_HOSTS.match(h)}
         for hit in sorted(hits)[:15]:
             findings.append(f"{label}: {hit[:90]}")
     return findings
@@ -137,6 +254,7 @@ def process(path: Path, out: Path | None, check_only: bool) -> int:
         return 1
 
     counts: Counter = Counter()
+    benign = node_ids(data)
     if not check_only:
         walk(data, counts)
     text = json.dumps(data, indent=2, ensure_ascii=False)
@@ -152,7 +270,7 @@ def process(path: Path, out: Path | None, check_only: bool) -> int:
     else:
         print("  nothing matched")
 
-    findings = residual_report(text)
+    findings = residual_report(text, benign)
     if findings:
         print(f"  -- {len(findings)} thing(s) to eyeball before committing --")
         for f in findings:
