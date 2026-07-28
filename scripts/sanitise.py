@@ -42,8 +42,10 @@ SECRET_KEY = re.compile(
 # Identifiers that point at one specific account's resources. Not secret, but
 # meaningless to anyone else and a small privacy leak.
 RESOURCE_ID_KEY = re.compile(
+    # Anchored, so compound names need spelling out: dataTableId does not match
+    # "table[_-]?id" because it begins with "data".
     r"^(?:(?:document|sheet|spreadsheet|folder|drive|file|calendar|database|table|base|"
-    r"project|team|channel|chat)[_-]?id"
+    r"data[_-]?table|project|team|channel|chat|assistant|vector[_-]?store)[_-]?id"
     r"|(?:campaign|workspace|audience|segment|mailbox)(?:[_-]?id)?)$",
     re.IGNORECASE,
 )
@@ -106,11 +108,19 @@ PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
 # Public vendor API endpoints. Keeping them is the point — they document the stack —
 # so they are excluded from the residual report to keep it worth reading.
 VENDOR_HOSTS = re.compile(
-    r"^https?://(?:api[0-9]*\.)?(?:elevenlabs\.io|transloadit\.com|anymailfinder\.com|"
+    # Any subdomain: maps.googleapis.com and queue.fal.run are as public as api.openai.com,
+    # and an allowlist that only understood "api." was reporting them as findings.
+    r"^https?://(?:[a-z0-9-]+\.)*(?:elevenlabs\.io|transloadit\.com|anymailfinder\.com|"
     r"instantly\.ai|cal\.com|openai\.com|anthropic\.com|tcscourier\.com|googleapis\.com|"
-    r"docs\.google\.com|ociconnect\.tcscourier\.com)",
+    r"google\.com|runwayml\.com|fal\.run|fal\.ai|leonardo\.ai|telegram\.org|pdf\.co|"
+    r"supabase\.com|make\.com)",
     re.IGNORECASE,
 )
+
+# Long snake_case or plain-word strings are identifiers, not secrets. A schema field
+# called reveal_answer_after_wrong_attempts is 34 characters of pure signal-free noise
+# in a report, and noise is what teaches people to stop reading the report.
+IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+$|^[A-Za-z]+$")
 
 # Shapes that survive redaction and are worth a second look by a human.
 RESIDUAL = [
@@ -192,7 +202,11 @@ def walk(node, counts: Counter, parent_key: str = ""):
                     node[key] = json.dumps(inner, indent=2, ensure_ascii=False)
                     counts["embedded JSON body"] += 1
             elif isinstance(value, str) and value:
-                if SECRET_KEY.search(key):
+                if SECRET_KEY.search(key) and not value.startswith("=") and not TEMPLATE.search(value):
+                    # An n8n expression ("={{ ... }}") or a Make template is wiring,
+                    # not data. Redacting it silently breaks the imported workflow,
+                    # which is worse than leaving a reference in place: the reader
+                    # cannot tell the logic was removed rather than never written.
                     node[key] = PLACEHOLDER
                     counts[f"key '{key}'"] += 1
                 elif ACCOUNT_KEY.match(key) and not TEMPLATE.search(value):
@@ -248,7 +262,7 @@ def residual_report(text: str, benign: set[str]) -> list[str]:
     for label, pattern in RESIDUAL:
         hits = {m.group(0) for m in pattern.finditer(text)}
         hits = {h for h in hits if not h.startswith("YOUR_") and h not in benign
-                and not VENDOR_HOSTS.match(h)}
+                and not VENDOR_HOSTS.match(h) and not IDENTIFIER.match(h)}
         for hit in sorted(hits)[:15]:
             findings.append(f"{label}: {hit[:90]}")
     return findings

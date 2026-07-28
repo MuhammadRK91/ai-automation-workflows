@@ -1,0 +1,320 @@
+{
+  "name": "Video Voice Feedback",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_ID",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        32,
+        -32
+      ],
+      "id": "d49c286a-17fc-42b2-8245-e5c0de86a72d",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4619ceda-8bbd-4ede-bd60-e2152f223bf3",
+              "name": "event_type",
+              "value": "={{ $json.body.event_type }}",
+              "type": "string"
+            },
+            {
+              "id": "8857b68e-37bc-44b6-961d-5b2f6ee24b2d",
+              "name": "project_id",
+              "value": "={{ $json.body.project_id }}",
+              "type": "string"
+            },
+            {
+              "id": "9f055850-068a-4983-b7ca-5f80dd36496d",
+              "name": "video_id",
+              "value": "={{ $json.body.video_id }}",
+              "type": "string"
+            },
+            {
+              "id": "ec5619b7-be1b-4d5b-a6f7-5cc58fec800f",
+              "name": "feedback_item_id",
+              "value": "={{ $json.body.feedback_item_id }}",
+              "type": "string"
+            },
+            {
+              "id": "cb5ada8e-c774-4d88-865f-9e8ad1aad4d6",
+              "name": "timestamp_seconds",
+              "value": "={{ $json.body.timestamp_seconds }}",
+              "type": "number"
+            },
+            {
+              "id": "969bc28a-b7a2-48c6-baff-89423e729afa",
+              "name": "timestamp_label",
+              "value": "={{ $json.body.timestamp_label }}",
+              "type": "string"
+            },
+            {
+              "id": "6401b80c-f4c3-416a-91b0-f189362aa542",
+              "name": "written_comment",
+              "value": "={{ $json.body.written_comment }}",
+              "type": "string"
+            },
+            {
+              "id": "088be490-b949-455f-8c50-564fe1ea95ca",
+              "name": "has_screenshot",
+              "value": "={{ !!$json.body.screenshot_image?.base64 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "19d31ceb-f256-4be7-9906-02a05aa022df",
+              "name": "has_annotated_image",
+              "value": "={{ !!$json.body.annotated_image?.base64 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "7e38dc68-6aa6-4beb-a315-2c7d63079c9a",
+              "name": "has_voice_note",
+              "value": "={{ !!$json.body.voice_note?.base64 }}",
+              "type": "boolean"
+            },
+            {
+              "id": "389aa38e-c39c-429f-b57e-f2fb11641a49",
+              "name": "has_drawing",
+              "value": "={{ $json.body.drawing_data?.has_drawing === true }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        160,
+        -32
+      ],
+      "id": "ef52692f-0e34-4fee-9bf9-a261647c0b15",
+      "name": "Extract Basic Feedback Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const basic = $input.first().json;\nconst body = $('Webhook').first().json.body;\n\nfunction stripBase64Prefix(base64String) {\n  if (!base64String) return null;\n\n  // Example input:\n  // data:image/png;base64,iVBORw0KGgo...\n  // data:audio/webm;base64,GkXfo59...\n  if (base64String.includes(',')) {\n    return base64String.split(',')[1];\n  }\n\n  return base64String;\n}\n\nreturn [\n  {\n    json: {\n      // Basic feedback data\n      event_type: basic.event_type,\n      project_id: basic.project_id,\n      video_id: basic.video_id,\n      feedback_item_id: basic.feedback_item_id,\n      timestamp_seconds: basic.timestamp_seconds,\n      timestamp_label: basic.timestamp_label,\n      written_comment: basic.written_comment,\n\n      // Boolean checks\n      has_screenshot: basic.has_screenshot,\n      has_annotated_image: basic.has_annotated_image,\n      has_voice_note: basic.has_voice_note,\n      has_drawing: basic.has_drawing,\n\n      // Screenshot image\n      screenshot_file_name: body.screenshot_image?.file_name || null,\n      screenshot_mime_type: body.screenshot_image?.mime_type || null,\n      screenshot_base64_clean: stripBase64Prefix(body.screenshot_image?.base64),\n\n      // Annotated image\n      annotated_file_name: body.annotated_image?.file_name || null,\n      annotated_mime_type: body.annotated_image?.mime_type || null,\n      annotated_base64_clean: stripBase64Prefix(body.annotated_image?.base64),\n\n      // Voice note\n      voice_file_name: body.voice_note?.file_name || null,\n      voice_mime_type: body.voice_note?.mime_type || null,\n      voice_base64_clean: stripBase64Prefix(body.voice_note?.base64),\n\n      // Drawing info\n      drawing_tool: body.drawing_data?.tool || null,\n      drawing_color: body.drawing_data?.color || null,\n\n      // Other useful data\n      created_at: body.created_at || null,\n      source: body.source || null\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        -32
+      ],
+      "id": "788e4cca-bca7-4f21-b0cd-0c777d9441d3",
+      "name": "Prepare Files"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst output = {\n  json: {\n    event_type: item.event_type,\n    project_id: item.project_id,\n    video_id: item.video_id,\n    feedback_item_id: item.feedback_item_id,\n    timestamp_seconds: item.timestamp_seconds,\n    timestamp_label: item.timestamp_label,\n    written_comment: item.written_comment,\n    has_screenshot: item.has_screenshot,\n    has_annotated_image: item.has_annotated_image,\n    has_voice_note: item.has_voice_note,\n    has_drawing: item.has_drawing,\n    screenshot_file_name: item.screenshot_file_name,\n    annotated_file_name: item.annotated_file_name,\n    voice_file_name: item.voice_file_name\n  },\n  binary: {}\n};\n\nif (item.screenshot_base64_clean) {\n  const screenshotBuffer = Buffer.from(item.screenshot_base64_clean, 'base64');\n\n  output.binary.screenshot = await this.helpers.prepareBinaryData(\n    screenshotBuffer,\n    item.screenshot_file_name || 'screenshot.png',\n    item.screenshot_mime_type || 'image/png'\n  );\n}\n\nif (item.annotated_base64_clean) {\n  const annotatedBuffer = Buffer.from(item.annotated_base64_clean, 'base64');\n\n  output.binary.annotated_image = await this.helpers.prepareBinaryData(\n    annotatedBuffer,\n    item.annotated_file_name || 'annotation.png',\n    item.annotated_mime_type || 'image/png'\n  );\n}\n\nif (item.voice_base64_clean) {\n  const voiceBuffer = Buffer.from(item.voice_base64_clean, 'base64');\n\n  output.binary.voice_note = await this.helpers.prepareBinaryData(\n    voiceBuffer,\n    item.voice_file_name || 'voice.webm',\n    item.voice_mime_type || 'audio/webm'\n  );\n}\n\nreturn [output];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -32
+      ],
+      "id": "ca818775-8545-4208-86a4-e2518e799046",
+      "name": "Create Binary Files"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "YOUR_CHATID",
+        "binaryData": true,
+        "binaryPropertyName": "screenshot",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        544,
+        -32
+      ],
+      "id": "80a7cee9-89f3-4773-98ce-9e67fdc4bacf",
+      "name": "Original Image",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "alwaysOutputData": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_telegramApi_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "YOUR_CHATID",
+        "binaryData": true,
+        "binaryPropertyName": "annotated_image",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        544,
+        -32
+      ],
+      "id": "fcd56a64-85c8-40aa-8c4c-c59b8ab97806",
+      "name": "Annotated Image",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "alwaysOutputData": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_telegramApi_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "YOUR_CHATID",
+        "binaryData": true,
+        "binaryPropertyName": "voice_note",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        544,
+        -32
+      ],
+      "id": "61e87bc2-5a15-4a88-b39f-08213bc33f1b",
+      "name": "Audio File",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "alwaysOutputData": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_telegramApi_CREDENTIAL"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHATID",
+        "text": "={{ `Feedback\n\nTimestamp\nTime: ${$json.timestamp_label}\nSeconds: ${$json.timestamp_seconds}\n\nEditor Note\n${$json.written_comment}\n\nFiles Included\nOriginal image: ${$json.has_screenshot ? 'Yes' : 'No'}\nAnnotated image: ${$json.has_annotated_image ? 'Yes' : 'No'}\nVoice note: ${$json.has_voice_note ? 'Yes' : 'No'}\nDrawing: ${$json.has_drawing ? 'Yes' : 'No'}\n\nPlease review the attached files and apply the feedback at the timestamp above.` }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        544,
+        -32
+      ],
+      "id": "a791c90a-cda4-425e-b1ff-0ee5b3039f59",
+      "name": "Summary",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_telegramApi_CREDENTIAL"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Basic Feedback Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Basic Feedback Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Files": {
+      "main": [
+        [
+          {
+            "node": "Create Binary Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Binary Files": {
+      "main": [
+        [
+          {
+            "node": "Annotated Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Original Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audio File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary": {
+      "main": [
+        []
+      ]
+    },
+    "Original Image": {
+      "main": [
+        []
+      ]
+    },
+    "Annotated Image": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2c2bf8b8-e11f-453e-b1ee-0933241382c7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "AHfRXDWbTk0MIyxT",
+  "tags": []
+}

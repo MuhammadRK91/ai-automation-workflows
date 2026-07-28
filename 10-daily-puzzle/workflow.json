@@ -1,0 +1,628 @@
+{
+  "name": "Daily Puzzle App",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        -64
+      ],
+      "id": "d9fab934-081f-4ce7-bdb2-9d710b2fb4c6",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const puzzleTypes = [\n  \"word_unlock\",\n  \"odd_one_out\",\n  \"sequence_puzzle\",\n  \"mini_riddle\"\n];\n\n// Difficulty rotation:\n// Day 1: medium\n// Day 2: easy\n// Day 3: hard\n// Day 4: medium\n// Day 5: easy\n// Day 6: hard\nconst difficultyTypes = [\n  \"medium\",\n  \"easy\",\n  \"hard\"\n];\n\n// Use today's date to rotate puzzle type and difficulty\nconst today = new Date();\n\n// Create a simple day number\nconst startDate = new Date(\"2026-05-14\");\nconst diffTime = today.getTime() - startDate.getTime();\nconst diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));\n\n// Rotate between 4 puzzle types\nconst selectedPuzzleIndex =\n  ((diffDays % puzzleTypes.length) + puzzleTypes.length) % puzzleTypes.length;\n\nconst selectedPuzzleType = puzzleTypes[selectedPuzzleIndex];\n\n// Rotate between 3 difficulty levels\nconst selectedDifficultyIndex =\n  ((diffDays % difficultyTypes.length) + difficultyTypes.length) % difficultyTypes.length;\n\nconst selectedDifficulty = difficultyTypes[selectedDifficultyIndex];\n\nreturn [\n  {\n    json: {\n      date: today.toISOString().split(\"T\")[0],\n      puzzle_type: selectedPuzzleType,\n      difficulty: selectedDifficulty,\n      rotation_day_number: diffDays + 1\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -432,
+        -64
+      ],
+      "id": "a9d12853-5540-4d32-8f6d-2e8f17b8adb2",
+      "name": "Select Daily Puzzle Type"
+    },
+    {
+      "parameters": {
+        "jsCode": "const puzzleType = $json.puzzle_type;\nconst date = $json.date;\nconst rotationDayNumber = $json.rotation_day_number;\nconst difficulty = $json.difficulty || \"medium\";\n\n// Recent Supabase history from Prepare Puzzle History node\nconst recentAnswers = $json.recent_answers || [];\nconst recentTitles = $json.recent_titles || [];\nconst recentClueAnswers = $json.recent_clue_answers || [];\nconst recentPuzzleSummary = $json.recent_puzzle_summary || [];\n\n// Regeneration context from Prepare Regeneration Attempt node\nconst generationAttempt = Number($json.generation_attempt || 1);\nconst previousFailedAnswer = $json.previous_failed_answer || null;\nconst previousFailedTitle = $json.previous_failed_title || null;\nconst previousValidationErrors = $json.previous_validation_errors || [];\n\nconst baseRules = `\nYou are a professional puzzle designer.\n\nCreate one high-quality daily puzzle for a daily puzzle app.\n\nReturn raw JSON only.\nDo not use markdown.\nDo not use triple backticks.\nDo not explain anything outside the JSON.\n\nGeneral rules:\n- The puzzle must be playable in 3 to 7 minutes.\n- The puzzle must be clear, fair, and fun.\n- The puzzle must be suitable for a general audience.\n- The puzzle must be solvable without internet search.\n- Avoid sensitive topics, politics, religion, adult content, violence, and controversial subjects.\n- Avoid obscure facts.\n- The puzzle must have only one correct answer.\n- The JSON must be valid.\n- difficulty must be \"${difficulty}\".\n- estimated_time_minutes must be a number between 3 and 7.\n- The share_text must not reveal the final answer, clue answers, odd item, correct option, hidden rule, pattern, riddle answer, hint, or solution.\n\nQuality rules:\n- Avoid boring school-quiz style puzzles.\n- Prefer puzzles that create a small \"aha\" moment.\n- The puzzle should feel like a daily game, not a textbook question.\n- Make the puzzle satisfying when the explanation is revealed.\n- Keep it fair, simple to understand, and logically clean.\n\nDifficulty rules:\n- If difficulty is \"easy\", make the puzzle more direct and beginner-friendly.\n- If difficulty is \"medium\", make the puzzle balanced with some thinking required.\n- If difficulty is \"hard\", make the puzzle more challenging but still fair and solvable without internet search.\n`;\n\nlet formatRules = \"\";\nlet gameplayRulesStructure = \"\";\n\nif (puzzleType === \"word_unlock\") {\n  gameplayRulesStructure = `{\n    \"clue_attempts_allowed\": 3,\n    \"show_hint_after_wrong_attempts\": 2,\n    \"reveal_answer_after_wrong_attempts\": 3,\n    \"final_answer_attempts_allowed\": 2\n  }`;\n\n  formatRules = `\nPuzzle type: word_unlock\n\nCreate a Word Unlock puzzle.\n\nGameplay:\nThe player solves 5 clues one by one.\nEach clue answer reveals one specific letter.\nThe 5 revealed letters together form the final answer.\n\nGameplay rules:\n- Use \"clue_attempts_allowed\": 3.\n- Use \"show_hint_after_wrong_attempts\": 2.\n- Use \"reveal_answer_after_wrong_attempts\": 3.\n- Use \"final_answer_attempts_allowed\": 2.\n- After the first wrong clue attempt, the app should say: \"Not quite. Try again.\"\n- After the second wrong clue attempt, the app should show the hint.\n- After the third wrong clue attempt, the app should reveal the correct clue answer and move to the next clue.\n- The final answer should allow 2 attempts.\n\nRules:\n- The final answer must be a common 5-letter English word.\n- Choose a fresh final answer each time and avoid repeated example words.\n- Do not use obvious repeated examples such as GRAIN, GRACE, SMART, PLANT, LIGHT, DREAM unless specifically requested.\n- Create exactly 5 clues.\n- Each clue must have one clear answer.\n- Each clue must include one helpful hint.\n- The hint should help the player after 2 wrong attempts but should not directly reveal the answer.\n- Each clue answer must contain the revealed letter.\n- The revealed letters must spell the final answer in order.\n- The top-level \"answer\" field must be the final 5-letter word.\n- Do not make the clues too easy or too hard.\n- Avoid obscure words.\n- The title must not reveal or strongly hint at the final answer.\n- The share_text must not reveal the final answer, clue answers, or solution.\n\nCreativity rules:\n- Prefer varied clue topics instead of using only basic household objects.\n- Avoid repeating the same clue-answer style too often.\n- Make the final word feel satisfying when unlocked.\n\nCapitalization rules for word_unlock:\n- All clue answers must be uppercase.\n- All revealed letters must be uppercase.\n- The top-level final answer must be uppercase.\n- Example: use \"SUNSET\", not \"sunset\".\n- Example: use \"S\", not \"s\".\n- Example: use \"SPARK\", not \"spark\".\n\nImportant:\n- revealed_letter_position_in_answer should start from 1, not 0.\n- Example: if the revealed letter is the first letter of the clue answer, use 1.\n- If it is the second letter, use 2.\n\npuzzle_data must use this structure:\n\n{\n  \"clues\": [\n    {\n      \"clue_number\": 1,\n      \"clue\": \"\",\n      \"answer\": \"\",\n      \"hint\": \"\",\n      \"revealed_letter\": \"\",\n      \"revealed_letter_position_in_answer\": 1\n    }\n  ],\n  \"final_word_length\": 5\n}\n`;\n}\n\nif (puzzleType === \"odd_one_out\") {\n  gameplayRulesStructure = `{\n    \"attempts_allowed\": 3,\n    \"show_hint_after_wrong_attempts\": 2,\n    \"reveal_answer_after_wrong_attempts\": 3\n  }`;\n\n  formatRules = `\nPuzzle type: odd_one_out\n\nCreate an Odd One Out puzzle.\n\nGameplay:\nThe player sees 5 items.\nExactly one item does not belong.\nThe other 4 items share one hidden rule.\nThe player must choose the single odd item.\n\nGameplay rules:\n- Use \"attempts_allowed\": 3.\n- Use \"show_hint_after_wrong_attempts\": 2.\n- Use \"reveal_answer_after_wrong_attempts\": 3.\n- Do not use clue_attempts_allowed.\n- Do not use final_answer_attempts_allowed.\n- After the first wrong attempt, the app should say: \"Not quite. Try again.\"\n- After the second wrong attempt, the app should show the hint.\n- After the third wrong attempt, the app should reveal the odd item.\n\nRules:\n- Create exactly 5 items.\n- Exactly 1 item must be the odd one out.\n- The other 4 items must clearly share one hidden rule.\n- The hidden rule must be clear and fair.\n- Avoid ambiguous categories.\n- Use common knowledge only.\n- Do not use trick questions.\n- The top-level \"answer\" field must be the text of the odd item.\n- Include a helpful hint that guides the player toward the hidden rule without directly revealing the answer.\n- The title must not reveal or strongly hint at the odd item.\n- The share_text must not reveal the odd item, hidden rule, or solution.\n\nCreativity rules:\n- Avoid basic school-list categories such as simple shapes, planets, colors, fruits, or animals unless there is a clever twist.\n- Prefer wordplay, hidden letter patterns, anagrams, sound patterns, everyday objects with a surprising shared rule, or lateral-thinking categories.\n- The 5 items should look like they could belong together at first glance.\n- The odd item should require thinking, not be instantly obvious.\n- The hidden rule should feel satisfying when revealed.\n- Make the explanation feel like an \"aha\" moment.\n- Good examples of hidden rules: four are anagrams, four contain a hidden word, four can follow the same word, four share a silent letter, four belong to a phrase pattern.\n- Avoid making the odd item obvious just because it is from a totally different category.\n\npuzzle_data must use this structure:\n\n{\n  \"items\": [\n    {\n      \"id\": \"A\",\n      \"text\": \"\"\n    },\n    {\n      \"id\": \"B\",\n      \"text\": \"\"\n    },\n    {\n      \"id\": \"C\",\n      \"text\": \"\"\n    },\n    {\n      \"id\": \"D\",\n      \"text\": \"\"\n    },\n    {\n      \"id\": \"E\",\n      \"text\": \"\"\n    }\n  ],\n  \"hidden_rule\": \"\",\n  \"odd_item_id\": \"\",\n  \"hint\": \"\"\n}\n`;\n}\n\nif (puzzleType === \"sequence_puzzle\") {\n  gameplayRulesStructure = `{\n    \"attempts_allowed\": 3,\n    \"show_hint_after_wrong_attempts\": 2,\n    \"reveal_answer_after_wrong_attempts\": 3\n  }`;\n\n  formatRules = `\nPuzzle type: sequence_puzzle\n\nCreate a Quick Logic puzzle.\n\nThis puzzle type can be one of these:\n- number sequence\n- word sequence\n- logic sequence\n- BODMAS / BIDMAS / order-of-operations puzzle\n- missing number puzzle\n- missing operator puzzle\n- quick arithmetic logic puzzle\n\nGameplay:\nThe player sees a short puzzle and chooses the correct next item or correct answer from 4 options.\n\nGameplay rules:\n- Use \"attempts_allowed\": 3.\n- Use \"show_hint_after_wrong_attempts\": 2.\n- Use \"reveal_answer_after_wrong_attempts\": 3.\n- Do not use clue_attempts_allowed.\n- Do not use final_answer_attempts_allowed.\n- After the first wrong attempt, the app should say: \"Not quite. Try again.\"\n- After the second wrong attempt, the app should show the hint.\n- After the third wrong attempt, the app should reveal the correct option.\n\nRules:\n- The puzzle must have one clear answer.\n- The pattern can be number-based, word-based, alphabet-based, calendar-based, visual-style text, logic-based, or order-of-operations based.\n- Create exactly 4 answer options.\n- Only one option must be correct.\n- The explanation must clearly explain the pattern or calculation.\n- The top-level \"answer\" field must be the correct option text.\n- Include a helpful hint that guides the player without directly revealing the answer.\n- The title must not reveal or strongly hint at the correct answer.\n- The share_text must not reveal the correct answer, pattern, or solution.\n\nCreativity rules:\n- Prefer viral-style quick logic puzzles, BODMAS/order-of-operations puzzles, missing-number puzzles, missing-operator puzzles, or misleading-but-fair arithmetic puzzles.\n- The puzzle should look simple at first but require careful thinking.\n- It should create a small \"aha\" moment.\n- Wrong options should represent common mistakes, not random numbers.\n- Avoid overused sequences such as prime numbers, Fibonacci, powers of 2, weekdays, months, and simple alphabet order.\n- If using a sequence, prefer word-based, letter-based, spelling-based, sound-based, everyday-object, or mixed-logic sequences.\n- If using BODMAS/order of operations, use standard rules clearly: parentheses/brackets first, then multiplication/division from left to right, then addition/subtraction from left to right.\n- Avoid genuinely ambiguous math notation.\n- Avoid expressions where implied multiplication could cause real disagreement, such as 8 ÷ 2(2 + 2).\n- Use clear operators such as ×, ÷, +, -, and parentheses.\n- Do not use complex math.\n- Avoid obscure facts or anything requiring internet search.\n\nFor BODMAS/order-of-operations puzzles:\n- The expression should be short and readable.\n- The correct answer must follow standard order of operations.\n- Wrong answers should come from common mistakes, such as solving left-to-right incorrectly or ignoring parentheses.\n- The hint should mention order of operations but should not directly solve the expression.\n- The explanation must show the calculation step by step.\n\npuzzle_data must use this structure:\n\n{\n  \"sequence\": [],\n  \"question\": \"What comes next?\",\n  \"options\": [\n    {\n      \"id\": \"A\",\n      \"text\": \"\"\n    },\n    {\n      \"id\": \"B\",\n      \"text\": \"\"\n    },\n    {\n      \"id\": \"C\",\n      \"text\": \"\"\n    },\n    {\n      \"id\": \"D\",\n      \"text\": \"\"\n    }\n  ],\n  \"correct_option_id\": \"\",\n  \"pattern_type\": \"\",\n  \"hint\": \"\"\n}\n\nImportant:\n- For BODMAS/order-of-operations puzzles, put the expression inside \"sequence\" as a single string.\n- Example: \"sequence\": [\"6 + 2 × 3\"]\n- For BODMAS/order-of-operations puzzles, use \"question\": \"What is the correct answer?\"\n- For sequence puzzles, use \"question\": \"What comes next?\"\n- pattern_type should be specific, such as \"order-of-operations\", \"missing-number\", \"word-sequence\", \"letter-pattern\", or \"logic-sequence\".\n`;\n}\n\nif (puzzleType === \"mini_riddle\") {\n  gameplayRulesStructure = `{\n    \"attempts_allowed\": 3,\n    \"show_hint_after_wrong_attempts\": 2,\n    \"reveal_answer_after_wrong_attempts\": 3\n  }`;\n\n  formatRules = `\nPuzzle type: mini_riddle\n\nCreate a Mini Riddle puzzle.\n\nGameplay:\nThe player reads one short riddle and guesses the answer.\nThe player gets 3 attempts.\nAfter 2 wrong attempts, the app shows a hint.\nAfter 3 wrong attempts, the app reveals the answer.\n\nGameplay rules:\n- Use \"attempts_allowed\": 3.\n- Use \"show_hint_after_wrong_attempts\": 2.\n- Use \"reveal_answer_after_wrong_attempts\": 3.\n- Do not use clue_attempts_allowed.\n- Do not use final_answer_attempts_allowed.\n- After the first wrong attempt, the app should say: \"Not quite. Try again.\"\n- After the second wrong attempt, the app should show the hint.\n- After the third wrong attempt, the app should reveal the answer.\n\nRules:\n- Create exactly 1 riddle.\n- The answer must be a common English word or common short phrase.\n- The answer must be clear and unique.\n- Avoid answers that could reasonably have many alternatives.\n- Avoid obscure objects, rare words, internet knowledge, trivia, politics, religion, adult content, violence, or controversial subjects.\n- Do not use overused riddle answers such as KEYBOARD, CLOCK, SHADOW, CANDLE, ECHO, SPONGE, MAP, BOOK, RIVER, FIRE, TIME, WIND, ENVELOPE, SECRET, MIRROR, FOOTSTEPS, TOWEL, BOTTLE, CLOUD, DOOR, LOCK, KEY, NEEDLE, STAMP, NEWSPAPER, UMBRELLA, MAGNET, STAPLE, or STAPLER unless specifically requested.\n- The top-level \"answer\" field must match puzzle_data.answer.\n- Include one helpful hint.\n- The hint must guide the player without directly revealing the answer or describing the object too obviously.\n- The explanation must explain why the answer fits the riddle.\n- The title must not reveal or strongly hint at the answer.\n- The share_text must not reveal the answer, hint, or explanation.\n- The instructions must not say \"single-word answer\" because mini_riddle answers may be either one word or a short phrase.\n- Use generic instruction wording such as: \"Read the riddle and type your answer. You have 3 attempts. After 2 wrong attempts, a hint appears. After 3 wrong attempts, the answer is revealed.\"\n\nAnswer precision rules:\n- The riddle must point to the exact answer, not a closely related object.\n- Avoid answers where the clue could fit both an object and the thing it produces, uses, holds, leaves behind, or controls.\n- If the answer is a tool, the riddle must describe what the tool does, not mainly describe the item used by the tool.\n- If the answer is an item produced, placed, or left behind by a tool, the answer must be that item, not the tool.\n- If the riddle describes a part, behavior, or property, that part, behavior, or property must truly belong to the answer.\n- Do not describe the result of an object and then use the object as the answer unless the wording clearly identifies the object as the actor.\n- Avoid close-pair ambiguity such as STAPLER vs STAPLE, PENCIL vs ERASER, LOCK vs KEY, BRUSH vs PAINT, NEEDLE vs THREAD, CAMERA vs PHOTO, PRINTER vs PAPER, SCISSORS vs CUT, or SPOON vs BOWL.\n- Before returning the puzzle, check whether a closely related word could also be a reasonable answer. If yes, rewrite the riddle or choose a different answer.\n- The riddle, hint, and explanation must all point to the same exact answer.\n- The explanation must not reveal that the riddle actually described a different related object.\n\nRiddle quality rules:\n- The riddle must not be too obvious from one direct clue.\n- Use 2 or 3 indirect clues instead of directly naming the object's most famous features.\n- The riddle should make the player think for a moment before the answer becomes clear.\n- The riddle should feel clever, but not unfair.\n- Avoid clue combinations that instantly reveal the answer, such as \"letters + flap + sealed\" for ENVELOPE.\n- Avoid clues that simply describe the physical object in a direct way.\n- Avoid using the answer's category too directly, such as saying \"I am found in a kitchen\" for a kitchen object or \"I am used in school\" for a school object.\n- Do not make the hint stronger than the riddle.\n- The hint should narrow the thinking direction without naming the object, its category, its mechanism, or its most recognizable feature.\n- The hint should be softer than the riddle, not more specific.\n- The hint should give a general direction, not identify the object's mechanism.\n- The hint should avoid technical or highly identifying words related to the answer.\n- The hint should not mention the answer's strongest giveaway feature.\n- The hint should feel like a nudge, not a second riddle that is easier than the first.\n- The hint should not include a word that commonly appears next to the answer in daily speech.\n- Do not put the answer or a near-synonym of the answer inside the riddle, hint, title, explanation opening, or share_text.\n- Make sure the riddle has only one reasonable answer after reading the riddle and hint together.\n- If more than one common answer could fit, choose a different riddle.\n\nHint strictness rules:\n- For medium difficulty, the hint must not be more obvious than the riddle.\n- For medium difficulty, the hint should not name the object's use, shape, category, material, mechanism, location, or most obvious feature.\n- For medium difficulty, the hint should be short and indirect.\n- For medium difficulty, the hint should help the player think in the right direction but should still require a real guess.\n- Do not use highly revealing hint phrases such as \"Think of a...\", \"This is used for...\", \"You use it when...\", \"It is found in...\", \"It has...\", or \"It opens/closes/folds/holds/carries...\" unless the answer would still remain unclear.\n- Do not use object-category words in the hint such as tool, object, device, cover, container, holder, place, animal, food, clothing, weather item, school item, kitchen item, or office item if they make the answer obvious.\n- For MAGNET-style answers, avoid words like attract, repel, poles, ends, metal, iron, force, field, materials, pull, or magnetic in the hint.\n- For UMBRELLA-style answers, avoid words like handheld, collapsible, cover, rain, roof, ribs, handle, shelter, storm, or weather in the hint.\n- For ENVELOPE-style answers, avoid words like letter, mail, paper, flap, sealed, stamp, address, or message in the hint.\n- For STAPLER-style answers, avoid words like staple, stapler, fasten, pages, paper, press, click, legs, metal, bent, or office in the hint.\n- A good medium hint should sound like this style: \"It is quiet, but nearby things may still seem to notice it.\"\n- A bad medium hint sounds like this style: \"Think of a small object that influences certain materials from a short distance and whose ends determine how it behaves.\"\n\nCreativity rules:\n- Prefer clever everyday objects, simple wordplay, hidden function clues, or light lateral thinking.\n- The riddle should feel satisfying, not like a random trick question.\n- Make the wording short, clean, and memorable.\n- Avoid riddles that depend only on spelling unless the clue makes that clear.\n- Avoid weak riddles where many answers could fit.\n- Avoid old classic riddles that users have likely seen many times.\n- Keep the riddle friendly and suitable for all ages.\n- The riddle should create a small \"aha\" moment when solved.\n- Use fresh answers that are not common riddle clichés.\n- Good answer types include everyday objects, simple tools, natural things, places, actions, or common concepts, but the clueing must be indirect and fair.\n- If the answer is a tool, describe the action of the tool clearly enough that the answer is the tool, not the material or result.\n- If a clue mentions a part or behavior, make sure that part or behavior truly belongs to the answer.\n\nDifficulty rules for mini_riddle:\n- If difficulty is \"easy\", make the clues more direct and the answer very common, but do not make the hint reveal the answer.\n- If difficulty is \"medium\", use 2 or 3 clues that point to the answer indirectly but fairly.\n- If difficulty is \"medium\", avoid giving away the answer too directly in the riddle or hint.\n- If difficulty is \"medium\", the answer should not be obvious from the first line alone.\n- If difficulty is \"medium\", the hint should help only after some thought; it should not solve the riddle by naming the object's use, mechanism, shape, category, location, or most obvious feature.\n- If difficulty is \"hard\", make the clue more lateral, but still make sure there is only one reasonable answer.\n\nBad mini_riddle examples to avoid:\n- Riddle: \"I carry letters but never speak. I have a flap that can be sealed. What am I?\" Answer: ENVELOPE. Problem: too direct.\n- Hint: \"Think of a handheld, collapsible cover that opens like a flower and tucks away when not needed.\" Answer: UMBRELLA. Problem: hint is too revealing.\n- Hint: \"Think of a small object that influences certain materials from a short distance and whose ends determine how it behaves.\" Answer: MAGNET. Problem: hint names the mechanism too clearly.\n- Riddle: \"I join pages with one quiet click, then fold my tiny legs away so they stay fastened.\" Answer: STAPLER. Problem: the tiny legs belong to the STAPLE, so the riddle is ambiguous between STAPLER and STAPLE.\n- Riddle: \"I have hands but cannot clap.\" Answer: CLOCK. Problem: overused classic.\n- Riddle: \"The more you take, the more you leave behind.\" Answer: FOOTSTEPS. Problem: overused classic.\n- Riddle: \"What gets wetter the more it dries?\" Answer: TOWEL. Problem: overused classic.\n- Riddle: \"I speak without a mouth and hear without ears.\" Answer: ECHO. Problem: overused classic.\n\nGood mini_riddle style:\n- Use indirect clues.\n- Use everyday logic.\n- Make the answer feel obvious only after it is revealed.\n- Make the hint useful but not decisive.\n- Keep the final explanation clear and satisfying.\n- If the answer is a tool, describe what the tool does, not mainly what its output or material does.\n- If the answer is a result or material, make that result or material the answer instead of the tool.\n\nCapitalization rules for mini_riddle:\n- Use normal sentence case for the riddle text.\n- Use normal sentence case for the hint.\n- The top-level answer must be uppercase.\n- puzzle_data.answer must be uppercase.\n\npuzzle_data must use this structure:\n\n{\n  \"riddle\": \"\",\n  \"hint\": \"\",\n  \"answer\": \"\"\n}\n`;\n}\n\nconst historyContext = `\nRecent puzzle history:\n- recent_answers: ${JSON.stringify(recentAnswers)}\n- recent_titles: ${JSON.stringify(recentTitles)}\n- recent_clue_answers: ${JSON.stringify(recentClueAnswers)}\n- recent_puzzle_summary: ${JSON.stringify(recentPuzzleSummary)}\n\nHistory rules:\n- Do not reuse any answer from recent_answers.\n- Do not reuse any title from recent_titles.\n- Do not reuse the same clue answers, item texts, option texts, or riddle answers from recent_clue_answers unless it is absolutely unavoidable.\n- Do not create a puzzle that feels too similar to the recent puzzle history.\n- For word_unlock, the top-level final answer must not be any word listed in recent_answers.\n- For odd_one_out, the top-level odd item answer must not be any item listed in recent_answers.\n- For sequence_puzzle, the top-level correct option answer must not be any item listed in recent_answers.\n- For mini_riddle, the top-level riddle answer must not be any item listed in recent_answers.\n`;\n\nconst regenerationContext = `\nRegeneration context:\n- generation_attempt: ${generationAttempt}\n- previous_failed_answer: ${previousFailedAnswer || \"none\"}\n- previous_failed_title: ${previousFailedTitle || \"none\"}\n- previous_validation_errors: ${JSON.stringify(previousValidationErrors)}\n\nRegeneration rules:\n- If generation_attempt is greater than 1, generate a fresh puzzle from scratch.\n- Do not reuse the previous_failed_answer.\n- Do not reuse the previous_failed_title.\n- Be extra careful that the puzzle logic is valid.\n- For mini_riddle, do not create a riddle with the same answer or same riddle idea as the failed puzzle.\n`;\n\nconst finalJsonStructure = `\nReturn exactly this JSON structure:\n\n{\n  \"date\": \"${date}\",\n  \"rotation_day_number\": ${rotationDayNumber},\n  \"generation_attempt\": ${generationAttempt},\n  \"puzzle_type\": \"${puzzleType}\",\n  \"title\": \"\",\n  \"difficulty\": \"${difficulty}\",\n  \"estimated_time_minutes\": 0,\n  \"instructions\": \"\",\n  \"gameplay_rules\": ${gameplayRulesStructure},\n  \"puzzle_data\": {},\n  \"answer\": \"\",\n  \"explanation\": \"\",\n  \"share_text\": \"\",\n  \"status\": \"draft\"\n}\n\nImportant final rules:\n- Do not return \"easy | medium | hard\" as the difficulty value.\n- The difficulty value must be exactly \"${difficulty}\".\n- Do not include any text before or after the JSON.\n- The response must be valid JSON that can be parsed with JSON.parse().\n- The share_text must not reveal the final answer, clue answers, odd item, correct option, hidden rule, pattern, riddle answer, hint, or solution.\n- For word_unlock only: all clue answers, revealed letters, and the final answer must be uppercase.\n- For mini_riddle only: the top-level answer and puzzle_data.answer must be uppercase.\n- For mini_riddle only: do not make the riddle or hint too direct, especially for medium or hard difficulty.\n- For mini_riddle only: the hint must be less revealing than the riddle.\n- For mini_riddle only: avoid close-pair ambiguity such as a tool versus the thing it uses, creates, leaves behind, or controls.\n- For mini_riddle only: instructions must say \"type your answer\" or \"enter your answer\", not \"single-word answer\".\n- The answer must not be in recent_answers.\n`;\n\nconst prompt = `${baseRules}\n\n${formatRules}\n\n${historyContext}\n\n${regenerationContext}\n\n${finalJsonStructure}`;\n\nreturn [\n  {\n    json: {\n      date,\n      rotation_day_number: rotationDayNumber,\n      generation_attempt: generationAttempt,\n      puzzle_type: puzzleType,\n      difficulty,\n      recent_answers: recentAnswers,\n      recent_titles: recentTitles,\n      recent_clue_answers: recentClueAnswers,\n      prompt\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -64
+      ],
+      "id": "5cd8b14a-8432-4a33-a601-c5cbb60cf0a1",
+      "name": "Build Puzzle Prompt"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are a professional puzzle designer and JSON generator.\n\nYour job is to create clean, fair, high-quality daily puzzles that feel fun, clever, and satisfying to solve.\n\nAlways follow the user's puzzle-generation instructions exactly.\n\nMake sure the puzzle is logically solvable, has only one correct answer, and includes all required gameplay fields such as hints, attempts, answers, and explanations when requested.\n\nRespect all history and regeneration rules. Do not reuse recent answers, recent clue answers, recent titles, or failed answers when instructed.\n\nAvoid boring school-quiz style puzzles unless specifically requested. Prefer puzzles with a small “aha” moment, fair wordplay, hidden patterns, satisfying logic, clever riddles, or viral-style order-of-operations challenges.\n\nReturn only valid raw JSON.\nDo not use markdown.\nDo not use code fences.\nDo not add explanations before or after the JSON.\nThe output must be directly parseable using JSON.parse()."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        16,
+        -64
+      ],
+      "id": "d841d753-e4c7-4313-94f4-1af55a184781",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        64
+      ],
+      "id": "eac7fa70-1667-49e9-8ed5-d5cd76d012cc",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_openAiApi_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.output || $json.text || $json.content || \"\";\n\nif (!raw) {\n  throw new Error(\"No AI output found. Expected output field from AI Agent.\");\n}\n\nconst cleaned = raw\n  .replace(/```json/g, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nlet puzzle;\n\ntry {\n  puzzle = JSON.parse(cleaned);\n} catch (error) {\n  throw new Error(\n    \"AI did not return valid JSON: \" + error.message + \"\\n\\nRaw output:\\n\" + raw\n  );\n}\n\nreturn [\n  {\n    json: puzzle\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -64
+      ],
+      "id": "0fa908cb-53ba-46a1-8d25-526b010c41d5",
+      "name": "Parse Puzzle JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "const puzzle = $json;\n\nconst errors = [];\n\nfunction normalizeText(value) {\n  return String(value || \"\").trim().toUpperCase();\n}\n\nfunction normalizeString(value) {\n  return String(value || \"\").trim();\n}\n\nfunction hasValue(value) {\n  return value !== undefined && value !== null && String(value).trim() !== \"\";\n}\n\nif (!puzzle.puzzle_type) {\n  errors.push(\"Missing puzzle_type.\");\n}\n\nif (!puzzle.answer) {\n  errors.push(\"Missing top-level answer.\");\n}\n\nif (!puzzle.puzzle_data || typeof puzzle.puzzle_data !== \"object\") {\n  errors.push(\"Missing puzzle_data object.\");\n}\n\nif (![\"word_unlock\", \"odd_one_out\", \"sequence_puzzle\", \"mini_riddle\"].includes(puzzle.puzzle_type)) {\n  errors.push(`Unsupported puzzle_type: ${puzzle.puzzle_type}`);\n}\n\n/* -----------------------------\n   WORD UNLOCK VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"word_unlock\") {\n  const clues = puzzle.puzzle_data?.clues;\n\n  if (!Array.isArray(clues)) {\n    errors.push(\"word_unlock puzzle_data.clues must be an array.\");\n  } else {\n    if (clues.length !== 5) {\n      errors.push(`word_unlock must have exactly 5 clues. Found ${clues.length}.`);\n    }\n\n    const revealedLetters = [];\n\n    clues.forEach((clue, index) => {\n      const clueNumber = Number(clue.clue_number || index + 1);\n      const answer = normalizeText(clue.answer);\n      const revealedLetter = normalizeText(clue.revealed_letter);\n      const position = Number(clue.revealed_letter_position_in_answer);\n\n      if (!hasValue(clue.clue)) {\n        errors.push(`Clue ${clueNumber}: missing clue.`);\n      }\n\n      if (!hasValue(clue.hint)) {\n        errors.push(`Clue ${clueNumber}: missing hint.`);\n      }\n\n      if (!answer) {\n        errors.push(`Clue ${clueNumber}: missing answer.`);\n        return;\n      }\n\n      if (!revealedLetter) {\n        errors.push(`Clue ${clueNumber}: missing revealed_letter.`);\n        return;\n      }\n\n      if (revealedLetter.length !== 1) {\n        errors.push(`Clue ${clueNumber}: revealed_letter must be exactly one letter.`);\n        return;\n      }\n\n      if (!Number.isInteger(position) || position < 1 || position > answer.length) {\n        errors.push(`Clue ${clueNumber}: invalid revealed_letter_position_in_answer.`);\n        return;\n      }\n\n      const actualLetter = answer[position - 1];\n\n      if (actualLetter !== revealedLetter) {\n        errors.push(\n          `Clue ${clueNumber}: position ${position} in \"${answer}\" is \"${actualLetter}\", not \"${revealedLetter}\".`\n        );\n      }\n\n      revealedLetters.push(revealedLetter);\n\n      clue.clue_number = clueNumber;\n      clue.answer = answer;\n      clue.revealed_letter = revealedLetter;\n      clue.revealed_letter_position_in_answer = position;\n    });\n\n    const unlockedWord = revealedLetters.join(\"\");\n    const finalAnswer = normalizeText(puzzle.answer);\n\n    puzzle.answer = finalAnswer;\n\n    if (finalAnswer.length !== 5) {\n      errors.push(`word_unlock answer must be 5 letters. Found ${finalAnswer.length}.`);\n    }\n\n    if (unlockedWord !== finalAnswer) {\n      errors.push(\n        `Revealed letters spell \"${unlockedWord}\", but top-level answer is \"${finalAnswer}\".`\n      );\n    }\n\n    if (puzzle.puzzle_data.final_word_length !== finalAnswer.length) {\n      errors.push(\n        `final_word_length is ${puzzle.puzzle_data.final_word_length}, but answer length is ${finalAnswer.length}.`\n      );\n    }\n  }\n}\n\n/* -----------------------------\n   ODD ONE OUT VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"odd_one_out\") {\n  const items = puzzle.puzzle_data?.items;\n  const oddItemId = normalizeString(puzzle.puzzle_data?.odd_item_id).toUpperCase();\n  const hiddenRule = normalizeString(puzzle.puzzle_data?.hidden_rule);\n  const hint = normalizeString(puzzle.puzzle_data?.hint);\n\n  if (!Array.isArray(items)) {\n    errors.push(\"odd_one_out puzzle_data.items must be an array.\");\n  } else {\n    if (items.length !== 5) {\n      errors.push(`odd_one_out must have exactly 5 items. Found ${items.length}.`);\n    }\n\n    const itemIds = [];\n\n    items.forEach((item, index) => {\n      const expectedId = String.fromCharCode(65 + index);\n      const id = normalizeString(item.id || expectedId).toUpperCase();\n      const text = normalizeString(item.text);\n\n      if (!id) {\n        errors.push(`Item ${index + 1}: missing id.`);\n      }\n\n      if (!text) {\n        errors.push(`Item ${id || index + 1}: missing text.`);\n      }\n\n      item.id = id;\n      item.text = text;\n\n      itemIds.push(id);\n    });\n\n    const uniqueIds = new Set(itemIds);\n\n    if (uniqueIds.size !== itemIds.length) {\n      errors.push(\"odd_one_out item ids must be unique.\");\n    }\n\n    if (!oddItemId) {\n      errors.push(\"odd_one_out missing odd_item_id.\");\n    } else if (!itemIds.includes(oddItemId)) {\n      errors.push(`odd_item_id \"${oddItemId}\" does not match any item id.`);\n    }\n\n    if (!hiddenRule) {\n      errors.push(\"odd_one_out missing hidden_rule.\");\n    }\n\n    if (!hint) {\n      errors.push(\"odd_one_out missing hint.\");\n    }\n\n    const oddItem = items.find(item => item.id === oddItemId);\n\n    if (oddItem && puzzle.answer) {\n      const normalizedTopAnswer = normalizeString(puzzle.answer).toUpperCase();\n      const normalizedOddText = normalizeString(oddItem.text).toUpperCase();\n\n      if (normalizedTopAnswer !== normalizedOddText) {\n        errors.push(\n          `Top-level answer \"${puzzle.answer}\" does not match odd item text \"${oddItem.text}\".`\n        );\n      }\n    }\n\n    puzzle.puzzle_data.odd_item_id = oddItemId;\n    puzzle.puzzle_data.hidden_rule = hiddenRule;\n    puzzle.puzzle_data.hint = hint;\n\n    if (oddItem) {\n      puzzle.answer = oddItem.text;\n    }\n  }\n}\n\n/* -----------------------------\n   SEQUENCE / QUICK LOGIC VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"sequence_puzzle\") {\n  const sequence = puzzle.puzzle_data?.sequence;\n  const options = puzzle.puzzle_data?.options;\n  const correctOptionId = normalizeString(puzzle.puzzle_data?.correct_option_id).toUpperCase();\n  const patternType = normalizeString(puzzle.puzzle_data?.pattern_type);\n  const hint = normalizeString(puzzle.puzzle_data?.hint);\n\n  const normalizedPatternType = patternType.toLowerCase();\n\n  const singlePromptPatternTypes = [\n    \"order-of-operations\",\n    \"bodmas\",\n    \"bidmas\",\n    \"arithmetic\",\n    \"quick-arithmetic\",\n    \"quick-logic\",\n    \"missing-number\",\n    \"missing-operator\",\n    \"logic-puzzle\",\n    \"math-logic\",\n    \"calculation\"\n  ];\n\n  const allowsSinglePrompt = singlePromptPatternTypes.includes(normalizedPatternType);\n\n  if (!Array.isArray(sequence)) {\n    errors.push(\"sequence_puzzle puzzle_data.sequence must be an array.\");\n  } else {\n    if (sequence.length < 1) {\n      errors.push(\"sequence_puzzle sequence must contain at least 1 item.\");\n    }\n\n    if (!allowsSinglePrompt && sequence.length < 3) {\n      errors.push(\n        `sequence_puzzle sequence should have at least 3 items for pattern_type \"${patternType}\". Found ${sequence.length}.`\n      );\n    }\n\n    if (allowsSinglePrompt && sequence.length !== 1) {\n      errors.push(\n        `sequence_puzzle with pattern_type \"${patternType}\" should usually contain exactly 1 puzzle expression/prompt in sequence. Found ${sequence.length}.`\n      );\n    }\n  }\n\n  if (!Array.isArray(options)) {\n    errors.push(\"sequence_puzzle puzzle_data.options must be an array.\");\n  } else {\n    if (options.length !== 4) {\n      errors.push(`sequence_puzzle must have exactly 4 options. Found ${options.length}.`);\n    }\n\n    const optionIds = [];\n\n    options.forEach((option, index) => {\n      const expectedId = String.fromCharCode(65 + index);\n      const id = normalizeString(option.id || expectedId).toUpperCase();\n      const text = normalizeString(option.text);\n\n      if (!id) {\n        errors.push(`Option ${index + 1}: missing id.`);\n      }\n\n      if (!text) {\n        errors.push(`Option ${id || index + 1}: missing text.`);\n      }\n\n      option.id = id;\n      option.text = text;\n\n      optionIds.push(id);\n    });\n\n    const uniqueOptionIds = new Set(optionIds);\n\n    if (uniqueOptionIds.size !== optionIds.length) {\n      errors.push(\"sequence_puzzle option ids must be unique.\");\n    }\n\n    if (!correctOptionId) {\n      errors.push(\"sequence_puzzle missing correct_option_id.\");\n    } else if (!optionIds.includes(correctOptionId)) {\n      errors.push(`correct_option_id \"${correctOptionId}\" does not match any option id.`);\n    }\n\n    const correctOption = options.find(option => option.id === correctOptionId);\n\n    if (correctOption && puzzle.answer) {\n      const normalizedTopAnswer = normalizeString(puzzle.answer).toUpperCase();\n      const normalizedCorrectText = normalizeString(correctOption.text).toUpperCase();\n\n      if (normalizedTopAnswer !== normalizedCorrectText) {\n        errors.push(\n          `Top-level answer \"${puzzle.answer}\" does not match correct option text \"${correctOption.text}\".`\n        );\n      }\n    }\n\n    if (correctOption) {\n      puzzle.answer = correctOption.text;\n    }\n  }\n\n  if (!hasValue(puzzle.puzzle_data?.question)) {\n    errors.push(\"sequence_puzzle missing question.\");\n  }\n\n  if (!patternType) {\n    errors.push(\"sequence_puzzle missing pattern_type.\");\n  }\n\n  if (!hint) {\n    errors.push(\"sequence_puzzle missing hint.\");\n  }\n\n  puzzle.puzzle_data.correct_option_id = correctOptionId;\n  puzzle.puzzle_data.pattern_type = patternType;\n  puzzle.puzzle_data.hint = hint;\n}\n\n/* -----------------------------\n   MINI RIDDLE VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"mini_riddle\") {\n  const riddle = normalizeString(puzzle.puzzle_data?.riddle);\n  const hint = normalizeString(puzzle.puzzle_data?.hint);\n  const dataAnswer = normalizeText(puzzle.puzzle_data?.answer);\n  const topAnswer = normalizeText(puzzle.answer);\n\n  if (!riddle) {\n    errors.push(\"mini_riddle missing riddle.\");\n  }\n\n  if (!hint) {\n    errors.push(\"mini_riddle missing hint.\");\n  }\n\n  if (!dataAnswer) {\n    errors.push(\"mini_riddle missing puzzle_data.answer.\");\n  }\n\n  if (!topAnswer) {\n    errors.push(\"mini_riddle missing top-level answer.\");\n  }\n\n  if (dataAnswer && topAnswer && dataAnswer !== topAnswer) {\n    errors.push(\n      `mini_riddle top-level answer \"${puzzle.answer}\" does not match puzzle_data.answer \"${puzzle.puzzle_data.answer}\".`\n    );\n  }\n\n  if (dataAnswer && dataAnswer.length < 2) {\n    errors.push(\"mini_riddle answer is too short.\");\n  }\n\n  if (dataAnswer && dataAnswer.length > 30) {\n    errors.push(\"mini_riddle answer is too long.\");\n  }\n\n  puzzle.puzzle_data.riddle = riddle;\n  puzzle.puzzle_data.hint = hint;\n  puzzle.puzzle_data.answer = dataAnswer;\n  puzzle.answer = dataAnswer || topAnswer;\n}\n\n/* -----------------------------\n   COMMON FIELD CHECKS\n------------------------------ */\n\nif (!hasValue(puzzle.title)) {\n  errors.push(\"Missing title.\");\n}\n\nif (![\"easy\", \"medium\", \"hard\"].includes(String(puzzle.difficulty || \"\").toLowerCase())) {\n  errors.push(`Invalid difficulty: ${puzzle.difficulty}`);\n}\n\nif (\n  !Number.isInteger(Number(puzzle.estimated_time_minutes)) ||\n  Number(puzzle.estimated_time_minutes) < 3 ||\n  Number(puzzle.estimated_time_minutes) > 7\n) {\n  errors.push(\"estimated_time_minutes must be a number between 3 and 7.\");\n}\n\nif (!hasValue(puzzle.instructions)) {\n  errors.push(\"Missing instructions.\");\n}\n\nif (!hasValue(puzzle.explanation)) {\n  errors.push(\"Missing explanation.\");\n}\n\nif (!hasValue(puzzle.share_text)) {\n  errors.push(\"Missing share_text.\");\n}\n\nif (!puzzle.gameplay_rules || typeof puzzle.gameplay_rules !== \"object\") {\n  errors.push(\"Missing gameplay_rules object.\");\n}\n\n/* -----------------------------\n   GAMEPLAY RULES VALIDATION\n------------------------------ */\n\nif (puzzle.gameplay_rules && typeof puzzle.gameplay_rules === \"object\") {\n  const rules = puzzle.gameplay_rules;\n\n  if (puzzle.puzzle_type === \"word_unlock\") {\n    if (!Number.isInteger(Number(rules.clue_attempts_allowed))) {\n      errors.push(\"word_unlock gameplay_rules missing clue_attempts_allowed.\");\n    }\n\n    if (!Number.isInteger(Number(rules.show_hint_after_wrong_attempts))) {\n      errors.push(\"word_unlock gameplay_rules missing show_hint_after_wrong_attempts.\");\n    }\n\n    if (!Number.isInteger(Number(rules.reveal_answer_after_wrong_attempts))) {\n      errors.push(\"word_unlock gameplay_rules missing reveal_answer_after_wrong_attempts.\");\n    }\n\n    if (!Number.isInteger(Number(rules.final_answer_attempts_allowed))) {\n      errors.push(\"word_unlock gameplay_rules missing final_answer_attempts_allowed.\");\n    }\n  }\n\n  if (\n    puzzle.puzzle_type === \"odd_one_out\" ||\n    puzzle.puzzle_type === \"sequence_puzzle\" ||\n    puzzle.puzzle_type === \"mini_riddle\"\n  ) {\n    if (!Number.isInteger(Number(rules.attempts_allowed))) {\n      errors.push(`${puzzle.puzzle_type} gameplay_rules missing attempts_allowed.`);\n    }\n\n    if (!Number.isInteger(Number(rules.show_hint_after_wrong_attempts))) {\n      errors.push(`${puzzle.puzzle_type} gameplay_rules missing show_hint_after_wrong_attempts.`);\n    }\n\n    if (!Number.isInteger(Number(rules.reveal_answer_after_wrong_attempts))) {\n      errors.push(`${puzzle.puzzle_type} gameplay_rules missing reveal_answer_after_wrong_attempts.`);\n    }\n\n    if (\"clue_attempts_allowed\" in rules) {\n      errors.push(`${puzzle.puzzle_type} should use attempts_allowed, not clue_attempts_allowed.`);\n    }\n\n    if (\"final_answer_attempts_allowed\" in rules) {\n      errors.push(`${puzzle.puzzle_type} should not use final_answer_attempts_allowed.`);\n    }\n  }\n}\n\npuzzle.validation = {\n  is_valid: errors.length === 0,\n  errors\n};\n\nreturn [\n  {\n    json: puzzle\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        -64
+      ],
+      "id": "540ce646-8a19-4730-ba1e-344b1404214f",
+      "name": "Validate Puzzle Logic"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a31e678f-7b04-49d3-b67f-3296817a0a04",
+              "leftValue": "={{ $json.validation.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        -64
+      ],
+      "id": "677ecf71-e9f0-43d7-9d5c-7170c49e33ba",
+      "name": "Check If Puzzle Valid"
+    },
+    {
+      "parameters": {
+        "jsCode": "const puzzle = $json;\n\nconst fixLog = [];\nconst errors = [];\n\nfunction normalizeText(value) {\n  return String(value || \"\").trim().toUpperCase();\n}\n\nfunction normalizeString(value) {\n  return String(value || \"\").trim();\n}\n\nfunction hasValue(value) {\n  return value !== undefined && value !== null && String(value).trim() !== \"\";\n}\n\nif (!puzzle.puzzle_type) {\n  errors.push(\"Missing puzzle_type. Cannot auto-fix.\");\n}\n\nif (!puzzle.puzzle_data || typeof puzzle.puzzle_data !== \"object\") {\n  errors.push(\"Missing puzzle_data object. Cannot auto-fix.\");\n}\n\n/* -----------------------------\n   COMMON LIGHT CLEANUP\n------------------------------ */\n\nif (puzzle.title) {\n  puzzle.title = normalizeString(puzzle.title);\n}\n\nif (puzzle.instructions) {\n  puzzle.instructions = normalizeString(puzzle.instructions);\n}\n\nif (puzzle.explanation) {\n  puzzle.explanation = normalizeString(puzzle.explanation);\n}\n\nif (puzzle.share_text) {\n  puzzle.share_text = normalizeString(puzzle.share_text);\n}\n\nif (puzzle.difficulty) {\n  puzzle.difficulty = normalizeString(puzzle.difficulty).toLowerCase();\n}\n\nif (puzzle.status) {\n  puzzle.status = normalizeString(puzzle.status).toLowerCase();\n}\n\n/* -----------------------------\n   WORD UNLOCK AUTO-FIX\n------------------------------ */\n\nif (puzzle.puzzle_type === \"word_unlock\") {\n  const clues = puzzle.puzzle_data?.clues;\n\n  if (!Array.isArray(clues)) {\n    errors.push(\"Missing puzzle_data.clues array. Cannot auto-fix word_unlock.\");\n  } else {\n    clues.forEach((clue, index) => {\n      const clueNumber = Number(clue.clue_number || index + 1);\n\n      const answer = normalizeText(clue.answer);\n      const revealedLetter = normalizeText(clue.revealed_letter);\n\n      clue.clue_number = clueNumber;\n      clue.answer = answer;\n      clue.revealed_letter = revealedLetter;\n\n      if (clue.clue) {\n        clue.clue = normalizeString(clue.clue);\n      }\n\n      if (clue.hint) {\n        clue.hint = normalizeString(clue.hint);\n      }\n\n      if (!answer) {\n        errors.push(`Clue ${clueNumber}: missing answer.`);\n        return;\n      }\n\n      if (!revealedLetter) {\n        errors.push(`Clue ${clueNumber}: missing revealed_letter.`);\n        return;\n      }\n\n      if (revealedLetter.length !== 1) {\n        errors.push(`Clue ${clueNumber}: revealed_letter must be exactly one character.`);\n        return;\n      }\n\n      let currentPosition = Number(clue.revealed_letter_position_in_answer);\n\n      const currentPositionIsWrong =\n        !Number.isInteger(currentPosition) ||\n        currentPosition < 1 ||\n        currentPosition > answer.length ||\n        answer[currentPosition - 1] !== revealedLetter;\n\n      if (currentPositionIsWrong) {\n        const correctIndex = answer.indexOf(revealedLetter);\n\n        if (correctIndex !== -1) {\n          const correctPosition = correctIndex + 1;\n\n          fixLog.push(\n            `Clue ${clueNumber}: changed revealed_letter_position_in_answer from ${clue.revealed_letter_position_in_answer} to ${correctPosition}.`\n          );\n\n          clue.revealed_letter_position_in_answer = correctPosition;\n        } else {\n          errors.push(\n            `Clue ${clueNumber}: cannot fix because revealed letter \"${revealedLetter}\" is not found in answer \"${answer}\".`\n          );\n        }\n      } else {\n        clue.revealed_letter_position_in_answer = currentPosition;\n      }\n    });\n\n    if (puzzle.answer) {\n      puzzle.answer = normalizeText(puzzle.answer);\n    }\n\n    if (puzzle.answer && puzzle.puzzle_data) {\n      const correctLength = puzzle.answer.length;\n\n      if (puzzle.puzzle_data.final_word_length !== correctLength) {\n        fixLog.push(\n          `Changed final_word_length from ${puzzle.puzzle_data.final_word_length} to ${correctLength}.`\n        );\n\n        puzzle.puzzle_data.final_word_length = correctLength;\n      }\n    }\n  }\n}\n\n/* -----------------------------\n   ODD ONE OUT AUTO-FIX\n------------------------------ */\n\nif (puzzle.puzzle_type === \"odd_one_out\") {\n  const items = puzzle.puzzle_data?.items;\n\n  if (!Array.isArray(items)) {\n    errors.push(\"Missing puzzle_data.items array. Cannot auto-fix odd_one_out.\");\n  } else {\n    puzzle.puzzle_data.items = items.map((item, index) => {\n      const expectedId = String.fromCharCode(65 + index);\n      const oldId = item.id;\n\n      const fixedItem = {\n        ...item,\n        id: normalizeString(item.id || expectedId).toUpperCase(),\n        text: normalizeString(item.text)\n      };\n\n      if (!oldId) {\n        fixLog.push(`Item ${index + 1}: added missing id \"${fixedItem.id}\".`);\n      }\n\n      return fixedItem;\n    });\n\n    if (puzzle.puzzle_data.odd_item_id) {\n      puzzle.puzzle_data.odd_item_id = normalizeString(puzzle.puzzle_data.odd_item_id).toUpperCase();\n    }\n\n    if (puzzle.puzzle_data.hidden_rule) {\n      puzzle.puzzle_data.hidden_rule = normalizeString(puzzle.puzzle_data.hidden_rule);\n    }\n\n    if (puzzle.puzzle_data.hint) {\n      puzzle.puzzle_data.hint = normalizeString(puzzle.puzzle_data.hint);\n    }\n\n    const oddItemId = puzzle.puzzle_data.odd_item_id;\n    const oddItem = puzzle.puzzle_data.items.find(item => item.id === oddItemId);\n\n    if (oddItem) {\n      const oldAnswer = puzzle.answer;\n      puzzle.answer = oddItem.text;\n\n      if (normalizeString(oldAnswer).toUpperCase() !== normalizeString(oddItem.text).toUpperCase()) {\n        fixLog.push(\n          `Changed top-level answer from \"${oldAnswer}\" to odd item text \"${oddItem.text}\".`\n        );\n      }\n    } else {\n      errors.push(`Cannot auto-fix answer because odd_item_id \"${oddItemId}\" does not match any item.`);\n    }\n  }\n}\n\n/* -----------------------------\n   SEQUENCE PUZZLE AUTO-FIX\n------------------------------ */\n\nif (puzzle.puzzle_type === \"sequence_puzzle\") {\n  const options = puzzle.puzzle_data?.options;\n\n  if (!Array.isArray(options)) {\n    errors.push(\"Missing puzzle_data.options array. Cannot auto-fix sequence_puzzle.\");\n  } else {\n    puzzle.puzzle_data.options = options.map((option, index) => {\n      const expectedId = String.fromCharCode(65 + index);\n      const oldId = option.id;\n\n      const fixedOption = {\n        ...option,\n        id: normalizeString(option.id || expectedId).toUpperCase(),\n        text: normalizeString(option.text)\n      };\n\n      if (!oldId) {\n        fixLog.push(`Option ${index + 1}: added missing id \"${fixedOption.id}\".`);\n      }\n\n      return fixedOption;\n    });\n\n    if (puzzle.puzzle_data.correct_option_id) {\n      puzzle.puzzle_data.correct_option_id = normalizeString(\n        puzzle.puzzle_data.correct_option_id\n      ).toUpperCase();\n    }\n\n    if (puzzle.puzzle_data.question) {\n      puzzle.puzzle_data.question = normalizeString(puzzle.puzzle_data.question);\n    }\n\n    if (puzzle.puzzle_data.pattern_type) {\n      puzzle.puzzle_data.pattern_type = normalizeString(puzzle.puzzle_data.pattern_type);\n    }\n\n    if (puzzle.puzzle_data.hint) {\n      puzzle.puzzle_data.hint = normalizeString(puzzle.puzzle_data.hint);\n    }\n\n    const correctOptionId = puzzle.puzzle_data.correct_option_id;\n    const correctOption = puzzle.puzzle_data.options.find(option => option.id === correctOptionId);\n\n    if (correctOption) {\n      const oldAnswer = puzzle.answer;\n      puzzle.answer = correctOption.text;\n\n      if (\n        normalizeString(oldAnswer).toUpperCase() !==\n        normalizeString(correctOption.text).toUpperCase()\n      ) {\n        fixLog.push(\n          `Changed top-level answer from \"${oldAnswer}\" to correct option text \"${correctOption.text}\".`\n        );\n      }\n    } else {\n      errors.push(\n        `Cannot auto-fix answer because correct_option_id \"${correctOptionId}\" does not match any option.`\n      );\n    }\n  }\n\n  if (Array.isArray(puzzle.puzzle_data?.sequence)) {\n    puzzle.puzzle_data.sequence = puzzle.puzzle_data.sequence.map(item => {\n      if (typeof item === \"string\") {\n        return normalizeString(item);\n      }\n\n      return item;\n    });\n  }\n}\n\n/* -----------------------------\n   MINI RIDDLE AUTO-FIX\n------------------------------ */\n\nif (puzzle.puzzle_type === \"mini_riddle\") {\n  if (!puzzle.puzzle_data || typeof puzzle.puzzle_data !== \"object\") {\n    errors.push(\"Missing puzzle_data object. Cannot auto-fix mini_riddle.\");\n  } else {\n    if (puzzle.puzzle_data.riddle) {\n      puzzle.puzzle_data.riddle = normalizeString(puzzle.puzzle_data.riddle);\n    }\n\n    if (puzzle.puzzle_data.hint) {\n      puzzle.puzzle_data.hint = normalizeString(puzzle.puzzle_data.hint);\n    }\n\n    if (puzzle.puzzle_data.answer) {\n      puzzle.puzzle_data.answer = normalizeText(puzzle.puzzle_data.answer);\n    }\n\n    if (puzzle.answer) {\n      puzzle.answer = normalizeText(puzzle.answer);\n    }\n\n    if (puzzle.puzzle_data.answer && puzzle.answer !== puzzle.puzzle_data.answer) {\n      const oldAnswer = puzzle.answer;\n      puzzle.answer = puzzle.puzzle_data.answer;\n\n      fixLog.push(\n        `Changed top-level answer from \"${oldAnswer}\" to puzzle_data.answer \"${puzzle.puzzle_data.answer}\".`\n      );\n    }\n\n    if (!puzzle.puzzle_data.answer && puzzle.answer) {\n      puzzle.puzzle_data.answer = puzzle.answer;\n\n      fixLog.push(\n        `Added missing puzzle_data.answer from top-level answer \"${puzzle.answer}\".`\n      );\n    }\n\n    if (puzzle.puzzle_data.answer && !puzzle.answer) {\n      puzzle.answer = puzzle.puzzle_data.answer;\n\n      fixLog.push(\n        `Added missing top-level answer from puzzle_data.answer \"${puzzle.puzzle_data.answer}\".`\n      );\n    }\n\n    if (!puzzle.puzzle_data.riddle) {\n      errors.push(\"mini_riddle missing riddle. Cannot auto-fix missing riddle text.\");\n    }\n\n    if (!puzzle.puzzle_data.hint) {\n      errors.push(\"mini_riddle missing hint. Cannot auto-fix missing hint.\");\n    }\n\n    if (!puzzle.puzzle_data.answer && !puzzle.answer) {\n      errors.push(\"mini_riddle missing answer. Cannot auto-fix missing answer.\");\n    }\n  }\n}\n\n/* -----------------------------\n   CLEAN OLD VALIDATION\n------------------------------ */\n\ndelete puzzle.validation;\n\npuzzle.auto_fix = {\n  attempted: true,\n  fixed: fixLog.length > 0,\n  fix_log: fixLog,\n  remaining_errors: errors\n};\n\nreturn [\n  {\n    json: puzzle\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        64
+      ],
+      "id": "25700cfa-c436-4a82-a38f-3c7676b380fe",
+      "name": "Auto Fix Puzzle With Code"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a31e678f-7b04-49d3-b67f-3296817a0a04",
+              "leftValue": "={{ $json.validation.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        592,
+        64
+      ],
+      "id": "48408ad7-9cd0-4fb6-9c65-1057c9a3cbcc",
+      "name": "Vallidate Again"
+    },
+    {
+      "parameters": {
+        "jsCode": "const puzzle = $json;\n\nconst errors = [];\n\nfunction normalizeText(value) {\n  return String(value || \"\").trim().toUpperCase();\n}\n\nfunction normalizeString(value) {\n  return String(value || \"\").trim();\n}\n\nfunction hasValue(value) {\n  return value !== undefined && value !== null && String(value).trim() !== \"\";\n}\n\nif (!puzzle.puzzle_type) {\n  errors.push(\"Missing puzzle_type.\");\n}\n\nif (!puzzle.answer) {\n  errors.push(\"Missing top-level answer.\");\n}\n\nif (!puzzle.puzzle_data || typeof puzzle.puzzle_data !== \"object\") {\n  errors.push(\"Missing puzzle_data object.\");\n}\n\nif (![\"word_unlock\", \"odd_one_out\", \"sequence_puzzle\", \"mini_riddle\"].includes(puzzle.puzzle_type)) {\n  errors.push(`Unsupported puzzle_type: ${puzzle.puzzle_type}`);\n}\n\n/* -----------------------------\n   WORD UNLOCK VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"word_unlock\") {\n  const clues = puzzle.puzzle_data?.clues;\n\n  if (!Array.isArray(clues)) {\n    errors.push(\"word_unlock puzzle_data.clues must be an array.\");\n  } else {\n    if (clues.length !== 5) {\n      errors.push(`word_unlock must have exactly 5 clues. Found ${clues.length}.`);\n    }\n\n    const revealedLetters = [];\n\n    clues.forEach((clue, index) => {\n      const clueNumber = Number(clue.clue_number || index + 1);\n      const answer = normalizeText(clue.answer);\n      const revealedLetter = normalizeText(clue.revealed_letter);\n      const position = Number(clue.revealed_letter_position_in_answer);\n\n      if (!hasValue(clue.clue)) {\n        errors.push(`Clue ${clueNumber}: missing clue.`);\n      }\n\n      if (!hasValue(clue.hint)) {\n        errors.push(`Clue ${clueNumber}: missing hint.`);\n      }\n\n      if (!answer) {\n        errors.push(`Clue ${clueNumber}: missing answer.`);\n        return;\n      }\n\n      if (!revealedLetter) {\n        errors.push(`Clue ${clueNumber}: missing revealed_letter.`);\n        return;\n      }\n\n      if (revealedLetter.length !== 1) {\n        errors.push(`Clue ${clueNumber}: revealed_letter must be exactly one letter.`);\n        return;\n      }\n\n      if (!Number.isInteger(position) || position < 1 || position > answer.length) {\n        errors.push(`Clue ${clueNumber}: invalid revealed_letter_position_in_answer.`);\n        return;\n      }\n\n      const actualLetter = answer[position - 1];\n\n      if (actualLetter !== revealedLetter) {\n        errors.push(\n          `Clue ${clueNumber}: position ${position} in \"${answer}\" is \"${actualLetter}\", not \"${revealedLetter}\".`\n        );\n      }\n\n      revealedLetters.push(revealedLetter);\n\n      clue.clue_number = clueNumber;\n      clue.answer = answer;\n      clue.revealed_letter = revealedLetter;\n      clue.revealed_letter_position_in_answer = position;\n    });\n\n    const unlockedWord = revealedLetters.join(\"\");\n    const finalAnswer = normalizeText(puzzle.answer);\n\n    puzzle.answer = finalAnswer;\n\n    if (finalAnswer.length !== 5) {\n      errors.push(`word_unlock answer must be 5 letters. Found ${finalAnswer.length}.`);\n    }\n\n    if (unlockedWord !== finalAnswer) {\n      errors.push(\n        `Revealed letters spell \"${unlockedWord}\", but top-level answer is \"${finalAnswer}\".`\n      );\n    }\n\n    if (puzzle.puzzle_data.final_word_length !== finalAnswer.length) {\n      errors.push(\n        `final_word_length is ${puzzle.puzzle_data.final_word_length}, but answer length is ${finalAnswer.length}.`\n      );\n    }\n  }\n}\n\n/* -----------------------------\n   ODD ONE OUT VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"odd_one_out\") {\n  const items = puzzle.puzzle_data?.items;\n  const oddItemId = normalizeString(puzzle.puzzle_data?.odd_item_id).toUpperCase();\n  const hiddenRule = normalizeString(puzzle.puzzle_data?.hidden_rule);\n  const hint = normalizeString(puzzle.puzzle_data?.hint);\n\n  if (!Array.isArray(items)) {\n    errors.push(\"odd_one_out puzzle_data.items must be an array.\");\n  } else {\n    if (items.length !== 5) {\n      errors.push(`odd_one_out must have exactly 5 items. Found ${items.length}.`);\n    }\n\n    const itemIds = [];\n\n    items.forEach((item, index) => {\n      const expectedId = String.fromCharCode(65 + index);\n      const id = normalizeString(item.id || expectedId).toUpperCase();\n      const text = normalizeString(item.text);\n\n      if (!id) {\n        errors.push(`Item ${index + 1}: missing id.`);\n      }\n\n      if (!text) {\n        errors.push(`Item ${id || index + 1}: missing text.`);\n      }\n\n      item.id = id;\n      item.text = text;\n\n      itemIds.push(id);\n    });\n\n    const uniqueIds = new Set(itemIds);\n\n    if (uniqueIds.size !== itemIds.length) {\n      errors.push(\"odd_one_out item ids must be unique.\");\n    }\n\n    if (!oddItemId) {\n      errors.push(\"odd_one_out missing odd_item_id.\");\n    } else if (!itemIds.includes(oddItemId)) {\n      errors.push(`odd_item_id \"${oddItemId}\" does not match any item id.`);\n    }\n\n    if (!hiddenRule) {\n      errors.push(\"odd_one_out missing hidden_rule.\");\n    }\n\n    if (!hint) {\n      errors.push(\"odd_one_out missing hint.\");\n    }\n\n    const oddItem = items.find(item => item.id === oddItemId);\n\n    if (oddItem && puzzle.answer) {\n      const normalizedTopAnswer = normalizeString(puzzle.answer).toUpperCase();\n      const normalizedOddText = normalizeString(oddItem.text).toUpperCase();\n\n      if (normalizedTopAnswer !== normalizedOddText) {\n        errors.push(\n          `Top-level answer \"${puzzle.answer}\" does not match odd item text \"${oddItem.text}\".`\n        );\n      }\n    }\n\n    puzzle.puzzle_data.odd_item_id = oddItemId;\n    puzzle.puzzle_data.hidden_rule = hiddenRule;\n    puzzle.puzzle_data.hint = hint;\n\n    if (oddItem) {\n      puzzle.answer = oddItem.text;\n    }\n  }\n}\n\n/* -----------------------------\n   SEQUENCE / QUICK LOGIC VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"sequence_puzzle\") {\n  const sequence = puzzle.puzzle_data?.sequence;\n  const options = puzzle.puzzle_data?.options;\n  const correctOptionId = normalizeString(puzzle.puzzle_data?.correct_option_id).toUpperCase();\n  const patternType = normalizeString(puzzle.puzzle_data?.pattern_type);\n  const hint = normalizeString(puzzle.puzzle_data?.hint);\n\n  const normalizedPatternType = patternType.toLowerCase();\n\n  const singlePromptPatternTypes = [\n    \"order-of-operations\",\n    \"bodmas\",\n    \"bidmas\",\n    \"arithmetic\",\n    \"quick-arithmetic\",\n    \"quick-logic\",\n    \"missing-number\",\n    \"missing-operator\",\n    \"logic-puzzle\",\n    \"math-logic\",\n    \"calculation\"\n  ];\n\n  const allowsSinglePrompt = singlePromptPatternTypes.includes(normalizedPatternType);\n\n  if (!Array.isArray(sequence)) {\n    errors.push(\"sequence_puzzle puzzle_data.sequence must be an array.\");\n  } else {\n    if (sequence.length < 1) {\n      errors.push(\"sequence_puzzle sequence must contain at least 1 item.\");\n    }\n\n    if (!allowsSinglePrompt && sequence.length < 3) {\n      errors.push(\n        `sequence_puzzle sequence should have at least 3 items for pattern_type \"${patternType}\". Found ${sequence.length}.`\n      );\n    }\n\n    if (allowsSinglePrompt && sequence.length !== 1) {\n      errors.push(\n        `sequence_puzzle with pattern_type \"${patternType}\" should usually contain exactly 1 puzzle expression/prompt in sequence. Found ${sequence.length}.`\n      );\n    }\n  }\n\n  if (!Array.isArray(options)) {\n    errors.push(\"sequence_puzzle puzzle_data.options must be an array.\");\n  } else {\n    if (options.length !== 4) {\n      errors.push(`sequence_puzzle must have exactly 4 options. Found ${options.length}.`);\n    }\n\n    const optionIds = [];\n\n    options.forEach((option, index) => {\n      const expectedId = String.fromCharCode(65 + index);\n      const id = normalizeString(option.id || expectedId).toUpperCase();\n      const text = normalizeString(option.text);\n\n      if (!id) {\n        errors.push(`Option ${index + 1}: missing id.`);\n      }\n\n      if (!text) {\n        errors.push(`Option ${id || index + 1}: missing text.`);\n      }\n\n      option.id = id;\n      option.text = text;\n\n      optionIds.push(id);\n    });\n\n    const uniqueOptionIds = new Set(optionIds);\n\n    if (uniqueOptionIds.size !== optionIds.length) {\n      errors.push(\"sequence_puzzle option ids must be unique.\");\n    }\n\n    if (!correctOptionId) {\n      errors.push(\"sequence_puzzle missing correct_option_id.\");\n    } else if (!optionIds.includes(correctOptionId)) {\n      errors.push(`correct_option_id \"${correctOptionId}\" does not match any option id.`);\n    }\n\n    const correctOption = options.find(option => option.id === correctOptionId);\n\n    if (correctOption && puzzle.answer) {\n      const normalizedTopAnswer = normalizeString(puzzle.answer).toUpperCase();\n      const normalizedCorrectText = normalizeString(correctOption.text).toUpperCase();\n\n      if (normalizedTopAnswer !== normalizedCorrectText) {\n        errors.push(\n          `Top-level answer \"${puzzle.answer}\" does not match correct option text \"${correctOption.text}\".`\n        );\n      }\n    }\n\n    if (correctOption) {\n      puzzle.answer = correctOption.text;\n    }\n  }\n\n  if (!hasValue(puzzle.puzzle_data?.question)) {\n    errors.push(\"sequence_puzzle missing question.\");\n  }\n\n  if (!patternType) {\n    errors.push(\"sequence_puzzle missing pattern_type.\");\n  }\n\n  if (!hint) {\n    errors.push(\"sequence_puzzle missing hint.\");\n  }\n\n  puzzle.puzzle_data.correct_option_id = correctOptionId;\n  puzzle.puzzle_data.pattern_type = patternType;\n  puzzle.puzzle_data.hint = hint;\n}\n\n/* -----------------------------\n   MINI RIDDLE VALIDATION\n------------------------------ */\n\nif (puzzle.puzzle_type === \"mini_riddle\") {\n  const riddle = normalizeString(puzzle.puzzle_data?.riddle);\n  const hint = normalizeString(puzzle.puzzle_data?.hint);\n  const dataAnswer = normalizeText(puzzle.puzzle_data?.answer);\n  const topAnswer = normalizeText(puzzle.answer);\n\n  if (!riddle) {\n    errors.push(\"mini_riddle missing riddle.\");\n  }\n\n  if (!hint) {\n    errors.push(\"mini_riddle missing hint.\");\n  }\n\n  if (!dataAnswer) {\n    errors.push(\"mini_riddle missing puzzle_data.answer.\");\n  }\n\n  if (!topAnswer) {\n    errors.push(\"mini_riddle missing top-level answer.\");\n  }\n\n  if (dataAnswer && topAnswer && dataAnswer !== topAnswer) {\n    errors.push(\n      `mini_riddle top-level answer \"${puzzle.answer}\" does not match puzzle_data.answer \"${puzzle.puzzle_data.answer}\".`\n    );\n  }\n\n  if (dataAnswer && dataAnswer.length < 2) {\n    errors.push(\"mini_riddle answer is too short.\");\n  }\n\n  if (dataAnswer && dataAnswer.length > 30) {\n    errors.push(\"mini_riddle answer is too long.\");\n  }\n\n  puzzle.puzzle_data.riddle = riddle;\n  puzzle.puzzle_data.hint = hint;\n  puzzle.puzzle_data.answer = dataAnswer;\n  puzzle.answer = dataAnswer || topAnswer;\n}\n\n/* -----------------------------\n   COMMON FIELD CHECKS\n------------------------------ */\n\nif (!hasValue(puzzle.title)) {\n  errors.push(\"Missing title.\");\n}\n\nif (![\"easy\", \"medium\", \"hard\"].includes(String(puzzle.difficulty || \"\").toLowerCase())) {\n  errors.push(`Invalid difficulty: ${puzzle.difficulty}`);\n}\n\nif (\n  !Number.isInteger(Number(puzzle.estimated_time_minutes)) ||\n  Number(puzzle.estimated_time_minutes) < 3 ||\n  Number(puzzle.estimated_time_minutes) > 7\n) {\n  errors.push(\"estimated_time_minutes must be a number between 3 and 7.\");\n}\n\nif (!hasValue(puzzle.instructions)) {\n  errors.push(\"Missing instructions.\");\n}\n\nif (!hasValue(puzzle.explanation)) {\n  errors.push(\"Missing explanation.\");\n}\n\nif (!hasValue(puzzle.share_text)) {\n  errors.push(\"Missing share_text.\");\n}\n\nif (!puzzle.gameplay_rules || typeof puzzle.gameplay_rules !== \"object\") {\n  errors.push(\"Missing gameplay_rules object.\");\n}\n\n/* -----------------------------\n   GAMEPLAY RULES VALIDATION\n------------------------------ */\n\nif (puzzle.gameplay_rules && typeof puzzle.gameplay_rules === \"object\") {\n  const rules = puzzle.gameplay_rules;\n\n  if (puzzle.puzzle_type === \"word_unlock\") {\n    if (!Number.isInteger(Number(rules.clue_attempts_allowed))) {\n      errors.push(\"word_unlock gameplay_rules missing clue_attempts_allowed.\");\n    }\n\n    if (!Number.isInteger(Number(rules.show_hint_after_wrong_attempts))) {\n      errors.push(\"word_unlock gameplay_rules missing show_hint_after_wrong_attempts.\");\n    }\n\n    if (!Number.isInteger(Number(rules.reveal_answer_after_wrong_attempts))) {\n      errors.push(\"word_unlock gameplay_rules missing reveal_answer_after_wrong_attempts.\");\n    }\n\n    if (!Number.isInteger(Number(rules.final_answer_attempts_allowed))) {\n      errors.push(\"word_unlock gameplay_rules missing final_answer_attempts_allowed.\");\n    }\n  }\n\n  if (\n    puzzle.puzzle_type === \"odd_one_out\" ||\n    puzzle.puzzle_type === \"sequence_puzzle\" ||\n    puzzle.puzzle_type === \"mini_riddle\"\n  ) {\n    if (!Number.isInteger(Number(rules.attempts_allowed))) {\n      errors.push(`${puzzle.puzzle_type} gameplay_rules missing attempts_allowed.`);\n    }\n\n    if (!Number.isInteger(Number(rules.show_hint_after_wrong_attempts))) {\n      errors.push(`${puzzle.puzzle_type} gameplay_rules missing show_hint_after_wrong_attempts.`);\n    }\n\n    if (!Number.isInteger(Number(rules.reveal_answer_after_wrong_attempts))) {\n      errors.push(`${puzzle.puzzle_type} gameplay_rules missing reveal_answer_after_wrong_attempts.`);\n    }\n\n    if (\"clue_attempts_allowed\" in rules) {\n      errors.push(`${puzzle.puzzle_type} should use attempts_allowed, not clue_attempts_allowed.`);\n    }\n\n    if (\"final_answer_attempts_allowed\" in rules) {\n      errors.push(`${puzzle.puzzle_type} should not use final_answer_attempts_allowed.`);\n    }\n  }\n}\n\npuzzle.validation = {\n  is_valid: errors.length === 0,\n  errors\n};\n\nreturn [\n  {\n    json: puzzle\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        64
+      ],
+      "id": "a3079c1e-aa37-4232-802f-c0a92b126dae",
+      "name": "Validate Puzzle Logic Again"
+    },
+    {
+      "parameters": {
+        "jsCode": "const previousPuzzle = $json;\n\nconst currentAttempt = Number(previousPuzzle.generation_attempt || 1);\nconst nextAttempt = currentAttempt + 1;\nconst maxAttempts = 3;\n\nconst canRegenerate = nextAttempt <= maxAttempts;\n\n// Get failed answer safely for all puzzle types\nlet previousFailedAnswer = previousPuzzle.answer || null;\n\n// Extra fallback for mini_riddle\nif (previousPuzzle.puzzle_type === \"mini_riddle\") {\n  previousFailedAnswer =\n    previousPuzzle.answer ||\n    previousPuzzle.puzzle_data?.answer ||\n    null;\n}\n\n// Extra fallback for sequence_puzzle\nif (previousPuzzle.puzzle_type === \"sequence_puzzle\") {\n  const correctOptionId = String(previousPuzzle.puzzle_data?.correct_option_id || \"\").trim().toUpperCase();\n  const correctOption = previousPuzzle.puzzle_data?.options?.find(\n    option => String(option.id || \"\").trim().toUpperCase() === correctOptionId\n  );\n\n  previousFailedAnswer =\n    previousPuzzle.answer ||\n    correctOption?.text ||\n    null;\n}\n\n// Extra fallback for odd_one_out\nif (previousPuzzle.puzzle_type === \"odd_one_out\") {\n  const oddItemId = String(previousPuzzle.puzzle_data?.odd_item_id || \"\").trim().toUpperCase();\n  const oddItem = previousPuzzle.puzzle_data?.items?.find(\n    item => String(item.id || \"\").trim().toUpperCase() === oddItemId\n  );\n\n  previousFailedAnswer =\n    previousPuzzle.answer ||\n    oddItem?.text ||\n    null;\n}\n\n// Extra fallback for word_unlock\nif (previousPuzzle.puzzle_type === \"word_unlock\") {\n  previousFailedAnswer =\n    previousPuzzle.answer ||\n    null;\n}\n\nreturn [\n  {\n    json: {\n      date: previousPuzzle.date,\n      rotation_day_number: previousPuzzle.rotation_day_number,\n      puzzle_type: previousPuzzle.puzzle_type,\n      difficulty: previousPuzzle.difficulty || \"medium\",\n\n      generation_attempt: nextAttempt,\n      max_generation_attempts: maxAttempts,\n      can_regenerate: canRegenerate,\n\n      previous_failed_answer: previousFailedAnswer,\n      previous_failed_title: previousPuzzle.title || null,\n      previous_validation_errors: previousPuzzle.validation?.errors || [],\n      previous_auto_fix: previousPuzzle.auto_fix || null,\n\n      regeneration_reason: \"Puzzle was still invalid after auto-fix and second validation.\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        176
+      ],
+      "id": "764642ac-ffd2-4b46-a04e-ef2df333aaad",
+      "name": "Prepare Regeneration Attempt"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7c5c3209-7f6c-4ca1-b15d-18fb19ac8f3b",
+              "leftValue": "={{ $json.can_regenerate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        176
+      ],
+      "id": "62e353b7-2306-4fb4-aec6-5e1469e6c5a9",
+      "name": "Can Regenerate?"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHATID",
+        "text": "Testing",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        592,
+        176
+      ],
+      "id": "153c1215-b619-4bd9-a23a-12f300da2278",
+      "name": "Send a text message",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_telegramApi_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const puzzle = $json;\n\nfunction ordinal(n) {\n  const num = Number(n);\n  const suffixes = [\"th\", \"st\", \"nd\", \"rd\"];\n  const value = num % 100;\n  return num + (suffixes[(value - 20) % 10] || suffixes[value] || suffixes[0]);\n}\n\nif (puzzle.puzzle_type === \"word_unlock\") {\n  const clues = puzzle.puzzle_data?.clues || [];\n\n  const explanationParts = clues.map(clue => {\n    return `${clue.answer} -> ${clue.revealed_letter} (${ordinal(clue.revealed_letter_position_in_answer)})`;\n  });\n\n  puzzle.explanation = `Each solved clue revealed one letter in order: ${explanationParts.join(\", \")}. Those letters spell the final 5-letter word ${puzzle.answer}.`;\n}\n\npuzzle.status = puzzle.status || \"draft\";\npuzzle.ready_for_storage = true;\npuzzle.generated_at = puzzle.generated_at || new Date().toISOString();\n\npuzzle.source = {\n  generated_by: \"n8n\",\n  validation_passed: puzzle.validation?.is_valid === true,\n  auto_fixed: puzzle.auto_fix?.fixed || false,\n  generation_attempt: puzzle.generation_attempt || 1\n};\n\nreturn [\n  {\n    json: puzzle\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        -64
+      ],
+      "id": "105a598b-59fc-4196-bd32-6a43b0070ac8",
+      "name": "Prepare Final Puzzle"
+    },
+    {
+      "parameters": {
+        "tableId": "YOUR_TABLEID",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "date",
+              "fieldValue": "={{ $json.date }}"
+            },
+            {
+              "fieldId": "rotation_day_number",
+              "fieldValue": "={{ $json.rotation_day_number }}"
+            },
+            {
+              "fieldId": "puzzle_type",
+              "fieldValue": "={{ $json.puzzle_type }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "difficulty",
+              "fieldValue": "={{ $json.difficulty }}"
+            },
+            {
+              "fieldId": "estimated_time_minutes",
+              "fieldValue": "={{ $json.estimated_time_minutes }}"
+            },
+            {
+              "fieldId": "instructions",
+              "fieldValue": "={{ $json.instructions }}"
+            },
+            {
+              "fieldId": "gameplay_rules",
+              "fieldValue": "={{ $json.gameplay_rules }}"
+            },
+            {
+              "fieldId": "puzzle_data",
+              "fieldValue": "={{ $json.puzzle_data }}"
+            },
+            {
+              "fieldId": "answer",
+              "fieldValue": "={{ $json.answer }}"
+            },
+            {
+              "fieldId": "explanation",
+              "fieldValue": "={{ $json.explanation }}"
+            },
+            {
+              "fieldId": "share_text",
+              "fieldValue": "={{ $json.share_text }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.status }}"
+            },
+            {
+              "fieldId": "validation",
+              "fieldValue": "={{ $json.validation }}"
+            },
+            {
+              "fieldId": "ready_for_storage",
+              "fieldValue": "={{ $json.ready_for_storage }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $json.source }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        704,
+        -64
+      ],
+      "id": "13b699d6-7496-4599-8e1a-df49d87e9eee",
+      "name": "Save Puzzle to Supabase",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_supabaseApi_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "YOUR_TABLEID",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "puzzle_type",
+              "condition": "eq",
+              "keyValue": "={{ $json.puzzle_type }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -64
+      ],
+      "id": "4a153593-9678-4339-a6eb-66b73040655c",
+      "name": "Get Recent Puzzles",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_supabaseApi_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const selectedPuzzle = $(\"Select Daily Puzzle Type\").first().json;\n\n// Rows returned from Supabase.\n// If no rows exist yet, n8n may pass one empty item because \"Always Output Data\" is enabled.\nconst recentPuzzles = $input\n  .all()\n  .map(item => item.json)\n  .filter(row => row && row.id);\n\n// Collect recent final answers\nconst recentAnswers = recentPuzzles\n  .map(p => p.answer)\n  .filter(Boolean);\n\n// Collect recent titles\nconst recentTitles = recentPuzzles\n  .map(p => p.title)\n  .filter(Boolean);\n\n// Collect recent clue/item/option answers\nconst recentClueAnswers = [];\n\nrecentPuzzles.forEach(puzzle => {\n  if (puzzle.puzzle_type === \"word_unlock\") {\n    const clues = puzzle.puzzle_data?.clues || [];\n\n    clues.forEach(clue => {\n      if (clue.answer) {\n        recentClueAnswers.push(clue.answer);\n      }\n    });\n  }\n\n  if (puzzle.puzzle_type === \"odd_one_out\") {\n    const items = puzzle.puzzle_data?.items || [];\n\n    items.forEach(item => {\n      if (item.text) {\n        recentClueAnswers.push(item.text);\n      }\n    });\n  }\n\n  if (puzzle.puzzle_type === \"sequence_puzzle\") {\n    const options = puzzle.puzzle_data?.options || [];\n\n    options.forEach(option => {\n      if (option.text) {\n        recentClueAnswers.push(option.text);\n      }\n    });\n  }\n});\n\n// Short history summary\nconst recentPuzzleSummary = recentPuzzles.map(p => ({\n  date: p.date,\n  puzzle_type: p.puzzle_type,\n  title: p.title,\n  answer: p.answer,\n  status: p.status\n}));\n\nreturn [\n  {\n    json: {\n      ...selectedPuzzle,\n\n      recent_answers: recentAnswers,\n      recent_titles: recentTitles,\n      recent_clue_answers: recentClueAnswers,\n      recent_puzzle_summary: recentPuzzleSummary\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        -64
+      ],
+      "id": "25437b80-650c-4c92-8ee1-0581d74bb304",
+      "name": "Prepare Puzzle History"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Select Daily Puzzle Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Daily Puzzle Type": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Puzzles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Puzzle Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Puzzle JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Puzzle JSON": {
+      "main": [
+        [
+          {
+            "node": "Validate Puzzle Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Puzzle Logic": {
+      "main": [
+        [
+          {
+            "node": "Check If Puzzle Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Puzzle Valid": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Puzzle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auto Fix Puzzle With Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Fix Puzzle With Code": {
+      "main": [
+        [
+          {
+            "node": "Validate Puzzle Logic Again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Puzzle Logic Again": {
+      "main": [
+        [
+          {
+            "node": "Vallidate Again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vallidate Again": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Puzzle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Regeneration Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Regeneration Attempt": {
+      "main": [
+        [
+          {
+            "node": "Can Regenerate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Regenerate?": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Puzzles",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Puzzle": {
+      "main": [
+        [
+          {
+            "node": "Save Puzzle to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Puzzles": {
+      "main": [
+        [
+          {
+            "node": "Prepare Puzzle History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Puzzle History": {
+      "main": [
+        [
+          {
+            "node": "Build Puzzle Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "aaf027e1-6d59-4d6e-8464-f72c98334652",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "Scj9o9M0BLcK8VcU",
+  "tags": []
+}

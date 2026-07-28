@@ -1,7 +1,7 @@
 # AI Automation Workflows
 
-Seven production automation pipelines I've built and run — LLM orchestration, media generation, data
-enrichment and multi-system integration across n8n and Make.
+Eleven automation pipelines I've built and run — LLM orchestration, media generation, data enrichment
+and multi-system integration across n8n and Make.
 
 These aren't demos. Each one runs on a schedule or a webhook and does real work: generating the
 content behind two published mobile apps, booking couriers for my own e-commerce business, running
@@ -18,18 +18,29 @@ Every export here is sanitised — see [SANITISING.md](SANITISING.md).
 | [05](05-ecommerce-shipping) | E-commerce shipping | Make | gpt-4o |
 | [06](06-lead-generation) | Lead generation and outreach | n8n | LLM agents |
 | [07](07-voice-appointment-agent) | Voice appointment agent | Make | gpt-4o |
+| [08](08-video-generation) | Video generation | Make | fal.ai · Leonardo.AI · RunwayML |
+| [09](09-video-feedback) | Video review feedback | n8n | — |
+| [10](10-daily-puzzle) | Daily puzzle generation | n8n | OpenAI agent |
+| [11](11-maps-lead-scraper) | Maps lead scraper | n8n | — |
 
-## Why seven
+## Why these eleven
 
-There are over 150 workflows in my n8n instance, plus Make scenarios. Seven are in this repo.
+There are over 150 workflows in my n8n instance, plus Make scenarios. Eleven are in this repo.
 
 They were picked because each one solves a *different* problem, not because they were the largest:
-map-reduce summarisation past a context limit, polling an async job instead of holding a worker open,
-an agent constrained by numbers computed in code before it runs, fuzzy normalisation of messy human
-input, strict structured output from a vision model, fan-out to platforms with incompatible media
-handling, and a voice interface where the model must never be the source of truth.
 
-A folder of 150 near-identical CRUD flows would demonstrate less than these seven do.
+- map-reduce summarisation past a context limit
+- polling an async job instead of holding a worker open, across three vendors in one chain
+- an agent constrained by numbers computed in code before it runs
+- strict structured output from a vision model
+- **validating model output and repairing it automatically, with a bounded retry**
+- fuzzy normalisation of messy human input
+- fan-out to platforms with incompatible media handling
+- **cursor pagination with the cursor persisted outside the run**
+- **multimodal capture — image, annotation and audio — as one payload**
+- a voice interface where the model is never the source of truth
+
+A folder of 150 near-identical CRUD flows would demonstrate less than these eleven do.
 
 ---
 
@@ -180,16 +191,102 @@ VAPI webhook → router on intent (schedule | reschedule | cancel)
 real Cal.com slot query, and the booking itself is a Google Calendar write. The model is the
 interface, not the source of truth. That separation is the entire design.
 
+## 08 · Video generation
+*Make · fal.ai FLUX realism · Leonardo.AI · RunwayML Gen-3 Turbo*
+
+```
+prompt → fal.ai flux-realism (1280x720, 35 steps)
+   → sleep → GET status_url → GET request → download the still
+   → Leonardo.AI: upload as init image
+   → Leonardo.AI: universal upscaler, 2x, realistic
+   → RunwayML image_to_video (gen3a_turbo, 5s, 1280x768)
+   → sleep → GET task
+```
+
+Three vendors, three independent job queues, one chain. Each stage submits work and comes back for it
+later, because none of them return a finished asset synchronously.
+
+**Where this one is weaker than 01, and why that matters.** The audiobook pipeline polls properly, with
+a `GET → Wait → Switch` loop that keeps checking until the assembly reports complete. This scenario
+uses fixed sleeps instead — 20 seconds for the image, 60 for the video — and checks once. That works
+until a vendor is slow, and then it fails for no visible reason. Same problem, two solutions, and only
+one of them is correct; the audiobook version is the one I'd copy forward.
+
+## 09 · Video review feedback
+*n8n · webhook · base64 media handling*
+
+A reviewer pauses a video, draws on the frame, records a voice note, types a comment, and submits.
+Instead of "something looks off around 2 minutes" in a doc, the editor receives the exact frame, the
+annotated version, the audio and the note, tied to a timestamp.
+
+```
+webhook → extract fields + presence flags
+   → strip base64 data-URI prefixes
+   → build binary attachments for whichever media are present
+   → deliver: original frame, annotated frame, voice note, summary
+```
+
+**Two details do the work here.** Browser-captured media arrives as a data URI —
+`data:image/png;base64,iVBOR...` — and the prefix has to come off before the payload is a valid
+buffer; miss it and you get a corrupt file rather than an error. And all three media types are
+optional, so attachments are constructed conditionally from presence flags rather than assumed, which
+is why a comment-only submission doesn't fail.
+
+Delivery currently goes to a chat transport, which is honest prototype scaffolding rather than the
+product — the capture and packaging is the part that took the thinking.
+
+## 10 · Daily puzzle generation
+*n8n · OpenAI agent · Supabase*
+
+One solvable puzzle per day, generated rather than authored.
+
+```
+select puzzle type → read recent puzzles → build prompt with that history
+   → agent generates → parse JSON → validate the logic
+   → valid?   yes → save
+              no  → repair in code → validate again
+                    still no → regeneration attempt (bounded) → else alert
+```
+
+**The generation is the easy half.** What makes this worth reading is everything after it: the puzzle
+is checked for logical validity, and when it fails the workflow first tries to *repair* it in code,
+then re-validates, then falls back to a bounded regeneration attempt, and only alerts a human once it
+has genuinely run out of options. A model that is right most of the time is not good enough when the
+output ships to users unattended, and "ask it again" is not an error-handling strategy.
+
+Recent puzzles are fed back into the prompt so the same puzzle isn't generated twice.
+
+## 11 · Maps lead scraper
+*n8n · Google Geocoding + Places · Google Sheets · n8n data table*
+
+Finds businesses by category and area, writes name, address, phone and website to a sheet.
+
+```
+parameters (query, address, radius, max) → geocode the address
+   → Places searchText, biased to a circle on those coordinates
+   → split → append rows → save nextPageToken to a data table
+   → cursor empty?  yes → stop
+                    no  → wait → reload cursor → next page → repeat
+   → also stop once the row count reaches the requested maximum
+```
+
+**The pagination is the whole exercise.** Places returns a `nextPageToken` and the obvious approach —
+hold it in a variable and loop — breaks the moment an execution ends. Here the cursor is written to an
+n8n data table, so it outlives the run and the next execution resumes exactly where the last one
+stopped. There are also two independent stop conditions: the cursor running out, and the collected
+count reaching the requested maximum. Either one alone eventually costs you money or an infinite loop.
+
 ---
 
 ## Stack
 
 **Orchestration** n8n · Make
-**AI** OpenAI gpt-5.1, gpt-4o, DALL·E 3 · Google Gemini 2.5 Pro · ElevenLabs
-**Data** Supabase (Postgres, Storage, Edge Functions) · Google Sheets
-**Documents & media** PDF.co · Transloadit
-**Integrations** Google Calendar · Google Drive · Cal.com · VAPI · TCS courier API · AnyMailFinder ·
-Instantly · Instagram · Facebook · LinkedIn · X
+**AI** OpenAI gpt-5.1, gpt-4o, DALL·E 3 · Google Gemini 2.5 Pro · ElevenLabs · fal.ai FLUX ·
+Leonardo.AI · RunwayML Gen-3
+**Data** Supabase (Postgres, Storage, Edge Functions) · Google Sheets · n8n data tables
+**Documents & media** PDF.co · Transloadit · base64 / binary handling
+**Integrations** Google Geocoding + Places · Google Calendar · Google Drive · Cal.com · VAPI ·
+TCS courier API · AnyMailFinder · Instantly · Instagram · Facebook · LinkedIn · X
 
 ## Repo layout
 
@@ -200,5 +297,5 @@ Instantly · Instagram · Facebook · LinkedIn · X
 └── canvas.png     screenshot of the graph
 ```
 
-Imports need your own credentials and endpoints — 104 values across the seven exports were replaced
+Imports need your own credentials and endpoints — 162 values across the eleven exports were replaced
 with placeholders. [SANITISING.md](SANITISING.md) documents what, and the script that does it.

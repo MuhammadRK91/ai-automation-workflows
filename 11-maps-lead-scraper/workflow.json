@@ -1,0 +1,952 @@
+{
+  "name": "Lead Finding Machine",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        -32
+      ],
+      "id": "c812f2ee-a019-4a56-a46e-deb8e6272935",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f6b66928-767b-448e-942f-cfe28219ddad",
+              "name": "google_maps_api",
+              "value": "YOUR_GOOGLE_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "2b275a97-b0e6-4985-80f1-2a0e0dcf7bb9",
+              "name": "query",
+              "value": "gyms",
+              "type": "string"
+            },
+            {
+              "id": "d91d7165-9f37-4227-aac7-7936d0e1fcac",
+              "name": "radius",
+              "value": "5000",
+              "type": "string"
+            },
+            {
+              "id": "59b87962-f3b7-4d06-b3e0-8f8b7181e77d",
+              "name": "address",
+              "value": "Central, London",
+              "type": "string"
+            },
+            {
+              "id": "1ca649c9-7613-432f-8a2c-19eacae1bfa0",
+              "name": "max_items",
+              "value": 100,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -400,
+        -32
+      ],
+      "id": "b81058f5-b249-4e04-8dba-54aa5241163b",
+      "name": "Parameters"
+    },
+    {
+      "parameters": {
+        "url": "https://maps.googleapis.com/maps/api/geocode/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "address",
+              "value": "={{ $json.address }}"
+            },
+            {
+              "name": "key",
+              "value": "={{ $json.google_maps_api }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -256,
+        -32
+      ],
+      "id": "aa323053-9ee3-47ec-ab5c-44e81feb7951",
+      "name": "Geocode"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Goog-Api-Key",
+              "value": "={{ $('Parameters').item.json.google_maps_api }}"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,nextPageToken"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $('Parameters').item.json.query }} in {{ $('Parameters').item.json.address }}\",\n  \"locationBias\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $('Geocode').item.json.results[0].geometry.location.lat }},\n        \"longitude\": {{ $('Geocode').item.json.results[0].geometry.location.lng }}\n      },\n      \"radius\": {{ $('Parameters').item.json.radius }}\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -96,
+        -32
+      ],
+      "id": "bda18790-bd42-4ceb-b524-fba970e126dd",
+      "name": "Places API"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "places",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        80,
+        -32
+      ],
+      "id": "6afeaafe-d164-4921-9526-569e55dd98aa",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_DOCUMENTID",
+          "mode": "list",
+          "cachedResultName": "5th May Updated",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Business Name": "={{ $json.displayName.text }}",
+            "Address": "={{ $json.formattedAddress }}",
+            "Website": "={{ $json.websiteUri }}",
+            "Phone Number": "={{ $json.nationalPhoneNumber }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Business Name",
+              "displayName": "Business Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        -32
+      ],
+      "id": "e1c83e99-73a3-40af-9059-599e83fa4a10",
+      "name": "Record",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_googleSheetsOAuth2Api_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "Business Name"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        384,
+        -32
+      ],
+      "id": "f5e3b6ab-19df-4a88-862a-a34c157026d0",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ab3ca675-d4ea-459b-af51-fc84a7832078",
+              "leftValue": "={{ $json.next_page_token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        656,
+        -32
+      ],
+      "id": "a289e7f9-52dd-4f41-8359-ad1ce8f7e9f7",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -352,
+        160
+      ],
+      "id": "a0d83794-405c-4a89-bb7e-776882f41ca6",
+      "name": "Wait",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "YOUR_DATATABLEID",
+          "mode": "list",
+          "cachedResultName": "next_page_token",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -192,
+        160
+      ],
+      "id": "e08f4dff-ed99-4e47-b6b9-e5ad5c0307d9",
+      "name": "Get Saved Token"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "YOUR_DATATABLEID",
+          "mode": "list",
+          "cachedResultName": "next_page_token",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "next_page_token": "={{ $('Places API').item.json.nextPageToken }}"
+          },
+          "matchingColumns": [
+            "next_page_token"
+          ],
+          "schema": [
+            {
+              "id": "next_page_token",
+              "displayName": "next_page_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        -32
+      ],
+      "id": "092d4a3a-c9c1-471d-91c0-372dc55221c4",
+      "name": "Save Next Page Token"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "places",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        144,
+        160
+      ],
+      "id": "1b6a22de-dbe0-405c-a35b-fd8caad6335d",
+      "name": "Split Out Again"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_DOCUMENTID",
+          "mode": "list",
+          "cachedResultName": "5th May Updated",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Business Name": "={{ $json.displayName.text }}",
+            "Address": "={{ $json.formattedAddress }}",
+            "Website": "={{ $json.websiteUri }}",
+            "Phone Number": "={{ $json.nationalPhoneNumber }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Business Name",
+              "displayName": "Business Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        272,
+        160
+      ],
+      "id": "2ba249b9-dc13-4339-8f05-cf505bace33e",
+      "name": "Record Again",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_googleSheetsOAuth2Api_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "Business Name"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        400,
+        160
+      ],
+      "id": "d7c1afac-d5a3-4822-953a-36d853f5dc5e",
+      "name": "Aggregate Again"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "YOUR_DATATABLEID",
+          "mode": "list",
+          "cachedResultName": "next_page_token",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "next_page_token",
+              "keyValue": "={{ $('Get Saved Token').item.json.next_page_token }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "next_page_token": "={{ $('Places API With Token').all().find(item => item.json.nextPageToken)?.json.nextPageToken }}"
+          },
+          "matchingColumns": [
+            "next_page_token"
+          ],
+          "schema": [
+            {
+              "id": "next_page_token",
+              "displayName": "next_page_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        544,
+        160
+      ],
+      "id": "9520a39b-99ec-4d45-b4ad-c9bf419c3db8",
+      "name": "Update Token"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3e8ea8a5-66c7-43f4-98b6-4b7f4b392d5d",
+              "leftValue": "={{ $json.next_page_token }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        160
+      ],
+      "id": "7957d03e-04cb-462e-9239-a295f4b98ad9",
+      "name": "Second If"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_DOCUMENTID",
+          "mode": "list",
+          "cachedResultName": "5th May Updated",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "YOUR_RESOURCE_URL"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        352
+      ],
+      "id": "66020ad3-56aa-4fdd-84ce-5a60b41a9411",
+      "name": "Get Rows",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_googleSheetsOAuth2Api_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "Business Name"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        400,
+        352
+      ],
+      "id": "098912c6-bc09-4d0f-ba21-ce73ca547333",
+      "name": "Aggregate Second Time"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bbfa085b-7057-4695-9b2f-5348e9fbe3ea",
+              "name": "num_businessess",
+              "value": "={{ $json[\"Business Name\"].length }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        576,
+        352
+      ],
+      "id": "0d3c57bc-699f-4c45-bac9-19d58c42f98e",
+      "name": "Get Business Count"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d71f1494-c2fe-4c67-994e-caf856a3b6fb",
+              "leftValue": "={{ $('Get Business Count').last().json.num_businessess }}",
+              "rightValue": "={{ $('Parameters').item.json.max_items }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        704,
+        352
+      ],
+      "id": "894d8c45-4451-474d-8d70-3cca4ec9a61b",
+      "name": "Last If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Goog-Api-Key",
+              "value": "={{ $('Parameters').item.json.google_maps_api }}"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,nextPageToken"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $('Parameters').item.json.query }} in {{ $('Parameters').item.json.address }}\",\n  \"locationBias\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $('Geocode').item.json.results[0].geometry.location.lat }},\n        \"longitude\": {{ $('Geocode').item.json.results[0].geometry.location.lng }}\n      },\n      \"radius\": {{ $('Parameters').item.json.radius }}\n    }\n  },\n  \"pageToken\": \"{{ $('Get Saved Token').first().json.next_page_token }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -16,
+        160
+      ],
+      "id": "256491ce-ea04-46e4-af90-cc9550f19427",
+      "name": "Places API With Token"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parameters": {
+      "main": [
+        [
+          {
+            "node": "Geocode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode": {
+      "main": [
+        [
+          {
+            "node": "Places API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Places API": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Save Next Page Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Saved Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Next Page Token": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Saved Token": {
+      "main": [
+        [
+          {
+            "node": "Places API With Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Again": {
+      "main": [
+        [
+          {
+            "node": "Record Again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Again": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Again": {
+      "main": [
+        [
+          {
+            "node": "Update Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Token": {
+      "main": [
+        [
+          {
+            "node": "Second If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Second If": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Rows": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Second Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Second Time": {
+      "main": [
+        [
+          {
+            "node": "Get Business Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Business Count": {
+      "main": [
+        [
+          {
+            "node": "Last If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Last If": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Places API With Token": {
+      "main": [
+        [
+          {
+            "node": "Split Out Again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "61684439-15a8-481b-81c5-7b364b39a648",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "gL0iokVHwurxctU8",
+  "tags": []
+}
