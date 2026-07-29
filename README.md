@@ -1,7 +1,7 @@
 # AI Automation Workflows
 
-Thirteen automation pipelines I've built and run — LLM orchestration, voice agents, media generation,
-data enrichment and multi-system integration across n8n and Make.
+Fourteen production AI systems I've built and run — LLM orchestration, retrieval, voice agents,
+media generation, data enrichment and multi-system integration across n8n, Make and Voiceflow.
 
 These aren't demos. Each one runs on a schedule or a webhook and does real work: generating the
 content behind two published mobile apps, booking couriers for my own e-commerce business, running
@@ -28,10 +28,12 @@ Every export here is sanitised — see [SANITISING.md](SANITISING.md).
 | [11](11-maps-lead-scraper) | Maps lead scraper | n8n | — |
 | [12](12-pest-control-voice-agent) | Pest control booking voice agent | n8n | VAPI · Cal.com |
 | [13](13-outbound-ai-caller) | Outbound AI caller | Make | gpt-4o · VAPI · Deepgram |
+| [14](14-dry-fruit-rag-assistant) | Multilingual RAG assistant | Voiceflow | gpt-4o · retrieval |
 
-## Why these thirteen
+## Why these fourteen
 
-There are over 150 workflows in my n8n instance, plus Make scenarios. Thirteen are in this repo.
+There are over 150 workflows in my n8n instance, plus Make scenarios and Voiceflow projects.
+Fourteen are in this repo.
 
 They were picked because each one solves a *different* problem, not because they were the largest:
 
@@ -47,16 +49,17 @@ They were picked because each one solves a *different* problem, not because they
 - a voice interface where the model is never the source of truth
 - **a full booking lifecycle behind speech, with the date arithmetic kept out of the model**
 - **an agent that rewrites its own prompt per record before it runs, then has its conversation graded**
+- **retrieval wrapped in a query rewrite and a grounding step, so a miss returns nothing rather than a guess**
 
-A folder of 150 near-identical CRUD flows would demonstrate less than these thirteen do.
+A folder of 150 near-identical CRUD flows would demonstrate less than these fourteen do.
 
 ---
 
 **Models are chosen per task, not per vendor.** Gemini 2.5 Pro does the meal-photo vision work because
 it handles strict JSON-only output well under a long constraint prompt; gpt-5.1 drives the meal-plan
 agent where reasoning over constraints matters; gpt-4o handles the high-volume, low-latency
-classification and copy jobs. Six providers across eleven workflows is a deliberate result of that,
-not vendor tourism.
+classification and copy jobs. Several providers across fourteen systems is a deliberate result of
+that, not vendor tourism.
 
 ---
 
@@ -347,6 +350,34 @@ model drops names and numbers on it.
 can be read early. There is no retry, no do-not-call list and no per-run cap; real outreach needs all
 three plus the consent and calling-hours rules of the jurisdiction being dialled.
 
+## 14 · Multilingual RAG assistant
+*Voiceflow · gpt-4o · Airtable · Zendesk · Google Maps*
+
+Customer-facing assistant for a dry fruit retailer. Answers questions from the shop's catalogue,
+searches the live product table, raises tickets and returns the shop location. Multilingual, with
+voice input and output alongside text.
+
+```
+question → rewrite the query for retrieval (clarify only if still ambiguous)
+   → kb-search, top 2 chunks from the catalogue
+   → answer strictly from retrieved context, explicit fall-through when it does not support one
+```
+
+**Retrieval is a pipeline, not a lookup.** "Is the small one cheaper" retrieves nothing on its own.
+Rewriting it against conversation state into a self-contained question is what makes the search land,
+and the user is only asked to clarify when the rewrite cannot resolve it alone.
+
+**`maxChunks` is 2 on purpose.** A product catalogue is dense and repetitive; a wider window pulls in
+near-identical entries and the model starts quoting the weight of one item with the price of another.
+
+**Product facts come from Airtable, not the model.** The knowledge base answers descriptive
+questions; anything a customer could hold the shop to is read from the table at answer time.
+
+Intent classification runs on gpt-4o at temperature 0.1 across 9 intents and 121 utterances, because
+customers do not use the shop's vocabulary and do not all ask in English.
+
+The Voiceflow export is not published. See the [folder README](14-dry-fruit-rag-assistant) for why.
+
 ---
 
 ## Stack
@@ -370,5 +401,8 @@ Facebook · LinkedIn · X
 └── canvas.png     screenshot of the graph
 ```
 
-Imports need your own credentials and endpoints — 162 values across the eleven exports were replaced
-with placeholders. [SANITISING.md](SANITISING.md) documents what, and the script that does it.
+Imports need your own credentials and endpoints: every credential, webhook path, resource id, phone
+number and email address in these exports was replaced with a placeholder.
+[SANITISING.md](SANITISING.md) documents what, and the script that does it.
+
+Number 14 is a Voiceflow project and ships as a README only, with no export. Its folder explains why.
