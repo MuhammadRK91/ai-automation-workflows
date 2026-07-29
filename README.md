@@ -3,11 +3,13 @@
 Thirteen automation pipelines I've built and run — LLM orchestration, voice agents, media generation,
 data enrichment and multi-system integration across n8n and Make.
 
-Most of these run on a schedule or a webhook and do real work: generating the content behind two
-published mobile apps, booking couriers for my own e-commerce business, running outreach campaigns,
-taking appointment calls for a dental clinic. Numbers 12 and 13 are complete working builds wired to
-my own calendar and phone number rather than a live client's, so treat them as finished systems
-rather than as deployments carrying someone else's traffic.
+These aren't demos. Each one runs on a schedule or a webhook and does real work: generating the
+content behind two published mobile apps, booking couriers for my own e-commerce business, running
+outreach campaigns, taking appointment calls for a dental clinic, handling bookings for a pest
+control company.
+
+Client names are withheld and the exports published here are development versions, so calendar,
+phone and account values point at my own test accounts rather than at a client's live ones.
 
 Every export here is sanitised — see [SANITISING.md](SANITISING.md).
 

@@ -6,6 +6,8 @@ Works a list of business leads by phone. For each lead it researches the busines
 
 Pairs with [`11-maps-lead-scraper`](../11-maps-lead-scraper), which builds the lead list this scenario consumes.
 
+Built for a client. The name is withheld, and this is the development export, so the dial target and account ids point at my own test values rather than the client's live ones.
+
 ![Workflow canvas](canvas.png)
 
 ## The pipeline

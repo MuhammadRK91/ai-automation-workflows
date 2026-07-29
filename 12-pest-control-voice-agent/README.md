@@ -4,6 +4,8 @@
 
 An inbound voice agent that handles the whole booking lifecycle for a pest control company: check what is free, book it, look up an existing appointment, then reschedule or cancel it. VAPI handles speech and calls out to four separate n8n webhooks, one per tool the agent can use.
 
+Built for a client. The name is withheld, and this is the development export, so the calendar and email values point at my own test accounts rather than the client's live ones.
+
 | Workflow | Voice tool | What it does |
 |---|---|---|
 | `01-check-availability` | `check_availability` | Parses a spoken day and time, asks Cal.com for real slots, answers whether the caller's preferred time is actually free |
