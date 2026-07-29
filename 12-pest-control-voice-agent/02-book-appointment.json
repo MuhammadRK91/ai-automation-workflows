@@ -1,0 +1,202 @@
+{
+  "name": "Pest Control Co  Booking",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_ID",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -496,
+        -112
+      ],
+      "id": "06d0131e-9fc7-44de-a37b-2a02df7cee37",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "you@example.com",
+          "mode": "list",
+          "cachedResultName": "you@example.com"
+        },
+        "start": "={{ $json.calendar_event.start }}",
+        "end": "={{ $json.calendar_event.end }}",
+        "useDefaultReminders": false,
+        "additionalFields": {
+          "attendees": [
+            "={{ $json.email }}"
+          ],
+          "description": "={{ $json.calendar_event.description }}",
+          "summary": "={{ $json.calendar_event.title }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        -224,
+        -112
+      ],
+      "id": "bd61f95d-dffd-45d7-80df-dd9c102929e5",
+      "name": "Create an event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_googleCalendarOAuth2Api_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const toolCall =\n  $json.body?.message?.toolCalls?.[0] ||\n  $json.body?.message?.toolCallList?.[0] ||\n  $json.toolCalls?.[0] ||\n  $json.toolCallList?.[0];\n\nif (!toolCall) {\n  throw new Error(\"No tool call found\");\n}\n\nconst toolCallId = toolCall.id;\nconst toolName = toolCall.function?.name;\n\nlet args = toolCall.function?.arguments;\n\nif (typeof args === \"string\") {\n  args = JSON.parse(args);\n}\n\nif (!args) {\n  throw new Error(\"No booking arguments found\");\n}\n\nif (!args.appointment_start) {\n  throw new Error(\"Missing appointment_start\");\n}\n\nconst start = new Date(args.appointment_start);\n\nif (isNaN(start.getTime())) {\n  throw new Error(\"Invalid appointment_start\");\n}\n\n// Extract timezone offset from appointment_start\n// Example: 2026-05-21T16:00:00+03:00\nfunction getTimezoneOffsetFromIso(isoString) {\n  const match = isoString.match(/([+-]\\d{2}:\\d{2}|Z)$/);\n\n  if (!match) {\n    throw new Error(\"appointment_start must include timezone, example: 2026-05-21T16:00:00+03:00\");\n  }\n\n  return match[1];\n}\n\n// Convert offset string to minutes\n// Example: +03:00 -> 180\nfunction offsetToMinutes(offset) {\n  if (offset === \"Z\") return 0;\n\n  const sign = offset.startsWith(\"+\") ? 1 : -1;\n  const [hours, minutes] = offset.slice(1).split(\":\").map(Number);\n\n  return sign * ((hours * 60) + minutes);\n}\n\n// Format date using the same timezone offset as appointment_start\nfunction formatWithOffset(date, offset) {\n  const offsetMinutes = offsetToMinutes(offset);\n  const localTime = new Date(date.getTime() + offsetMinutes * 60 * 1000);\n\n  const datePart = localTime.toISOString().slice(0, 19);\n\n  if (offset === \"Z\") {\n    return `${datePart}Z`;\n  }\n\n  return `${datePart}${offset}`;\n}\n\nconst timezoneOffset = getTimezoneOffsetFromIso(args.appointment_start);\n\n// Default appointment duration: 1 hour\nconst end = new Date(start.getTime() + 60 * 60 * 1000);\n\nconst appointmentStartFormatted = formatWithOffset(start, timezoneOffset);\nconst appointmentEndFormatted = formatWithOffset(end, timezoneOffset);\n\nconst eventTitle = `Pest Control - ${args.pest_issue} - ${args.customer_name}`;\n\nconst safetyNotes = args.safety_notes || \"No safety notes provided\";\n\nconst eventDescription = `\nCustomer: ${args.customer_name}\nPhone: ${args.phone_number}\nEmail: ${args.email}\n\nService Address: ${args.service_address}, ${args.city}\nProperty Type: ${args.property_type || \"Not provided\"}\n\nPest Issue: ${args.pest_issue}\nUrgency: ${args.urgency}\nNotes: ${args.notes || \"No notes provided\"}\nSafety Notes: ${safetyNotes}\n\nAppointment: ${args.appointment_time_label}\n`.trim();\n\nreturn [\n  {\n    json: {\n      toolCallId,\n      toolName,\n\n      customer_name: args.customer_name,\n      phone_number: args.phone_number,\n      email: args.email,\n      service_address: args.service_address,\n      city: args.city,\n      pest_issue: args.pest_issue,\n      urgency: args.urgency,\n      notes: args.notes || \"\",\n      safety_notes: args.safety_notes || \"\",\n      property_type: args.property_type || \"\",\n      appointment_start: appointmentStartFormatted,\n      appointment_end: appointmentEndFormatted,\n      appointment_time_label: args.appointment_time_label,\n\n      calendar_event: {\n        title: eventTitle,\n        start: appointmentStartFormatted,\n        end: appointmentEndFormatted,\n        location: `${args.service_address}, ${args.city}`,\n        description: eventDescription,\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        -112
+      ],
+      "id": "fb9a7640-fc06-4ad8-bc78-4aa81f75d4be",
+      "name": "Prepare booking data"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Prepare booking data').item.json.email }}",
+        "subject": "={{ $('Prepare booking data').item.json.customer_name }} - Pest Control Co Appointment Confirmed",
+        "message": "=<div style=\"font-family: Arial, sans-serif; color: #222; line-height: 1.6; max-width: 600px;\">\n  <p>Hi {{ $('Prepare booking data').item.json.customer_name }},</p>\n\n  <p>Your Pest Control Co appointment is confirmed.</p>\n\n  <table style=\"border-collapse: collapse; width: 100%; margin: 20px 0;\">\n    <tr>\n      <td style=\"padding: 8px 0; font-weight: bold; width: 140px;\">Appointment:</td>\n      <td style=\"padding: 8px 0;\">\n        {{ DateTime.fromISO($json.start.dateTime).setZone($json.start.timeZone).toFormat('cccc, LLLL d, yyyy, h:mm a') }}\n        –\n        {{ DateTime.fromISO($json.end.dateTime).setZone($json.end.timeZone).toFormat('h:mm a') }}\n      </td>\n    </tr>\n\n    <tr>\n      <td style=\"padding: 8px 0; font-weight: bold;\">Service:</td>\n      <td style=\"padding: 8px 0;\">\n        {{ $('Prepare booking data').item.json.pest_issue }} treatment\n      </td>\n    </tr>\n\n    <tr>\n      <td style=\"padding: 8px 0; font-weight: bold;\">Address:</td>\n      <td style=\"padding: 8px 0;\">\n        {{ $('Prepare booking data').item.json.service_address }}, {{ $('Prepare booking data').item.json.city }}\n      </td>\n    </tr>\n\n    <tr>\n      <td style=\"padding: 8px 0; font-weight: bold;\">Property Type:</td>\n      <td style=\"padding: 8px 0;\">\n        {{ $('Prepare booking data').item.json.property_type }}\n      </td>\n    </tr>\n  </table>\n\n  <p>\n    <strong>Notes:</strong><br>\n    {{ $('Prepare booking data').item.json.notes || 'No notes provided.' }}\n  </p>\n\n  <p>The technician will call before arrival.</p>\n\n  <p>If you need to reschedule or cancel, please contact us.</p>\n\n  <p>\n    Thank you,<br>\n    Pest Control Co\n  </p>\n</div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -96,
+        -112
+      ],
+      "id": "2eb540ab-391b-4ebb-8c59-022661c613e6",
+      "name": "Send a message",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_gmailOAuth2_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { results: $json.results } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        240,
+        -112
+      ],
+      "id": "5066a7d6-7072-4f79-9f9c-a479c48b2229",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const booking = $('Prepare booking data').item.json;\n\nconst confirmationMessage =\n  `You’re all set. Your appointment is confirmed for ${booking.appointment_time_label}, and a confirmation email has been sent to ${booking.email}.`;\n\nreturn [\n  {\n    json: {\n      results: [\n        {\n          toolCallId: booking.toolCallId,\n          result: confirmationMessage\n        }\n      ]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -112
+      ],
+      "id": "fd75f5eb-6a25-4dab-9157-88bd0e77a34f",
+      "name": "Prepare Vapi Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare booking data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare booking data": {
+      "main": [
+        [
+          {
+            "node": "Create an event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create an event": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Prepare Vapi Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Vapi Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c4fcc502-2d02-4e0e-bbe4-076f24836feb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "FziPmMG366qIjcgF",
+  "tags": []
+}

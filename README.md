@@ -1,11 +1,13 @@
 # AI Automation Workflows
 
-Eleven automation pipelines I've built and run — LLM orchestration, media generation, data enrichment
-and multi-system integration across n8n and Make.
+Thirteen automation pipelines I've built and run — LLM orchestration, voice agents, media generation,
+data enrichment and multi-system integration across n8n and Make.
 
-These aren't demos. Each one runs on a schedule or a webhook and does real work: generating the
-content behind two published mobile apps, booking couriers for my own e-commerce business, running
-outreach campaigns, taking appointment calls for a dental clinic.
+Most of these run on a schedule or a webhook and do real work: generating the content behind two
+published mobile apps, booking couriers for my own e-commerce business, running outreach campaigns,
+taking appointment calls for a dental clinic. Numbers 12 and 13 are complete working builds wired to
+my own calendar and phone number rather than a live client's, so treat them as finished systems
+rather than as deployments carrying someone else's traffic.
 
 Every export here is sanitised — see [SANITISING.md](SANITISING.md).
 
@@ -22,10 +24,12 @@ Every export here is sanitised — see [SANITISING.md](SANITISING.md).
 | [09](09-video-feedback) | Video review feedback | n8n | — |
 | [10](10-daily-puzzle) | Daily puzzle generation | n8n | OpenAI agent |
 | [11](11-maps-lead-scraper) | Maps lead scraper | n8n | — |
+| [12](12-pest-control-voice-agent) | Pest control booking voice agent | n8n | VAPI · Cal.com |
+| [13](13-outbound-ai-caller) | Outbound AI caller | Make | gpt-4o · VAPI · Deepgram |
 
-## Why these eleven
+## Why these thirteen
 
-There are over 150 workflows in my n8n instance, plus Make scenarios. Eleven are in this repo.
+There are over 150 workflows in my n8n instance, plus Make scenarios. Thirteen are in this repo.
 
 They were picked because each one solves a *different* problem, not because they were the largest:
 
@@ -39,8 +43,10 @@ They were picked because each one solves a *different* problem, not because they
 - **cursor pagination with the cursor persisted outside the run**
 - **multimodal capture — image, annotation and audio — as one payload**
 - a voice interface where the model is never the source of truth
+- **a full booking lifecycle behind speech, with the date arithmetic kept out of the model**
+- **an agent that rewrites its own prompt per record before it runs, then has its conversation graded**
 
-A folder of 150 near-identical CRUD flows would demonstrate less than these eleven do.
+A folder of 150 near-identical CRUD flows would demonstrate less than these thirteen do.
 
 ---
 
@@ -277,6 +283,68 @@ n8n data table, so it outlives the run and the next execution resumes exactly wh
 stopped. There are also two independent stop conditions: the cursor running out, and the collected
 count reaching the requested maximum. Either one alone eventually costs you money or an infinite loop.
 
+## 12 · Pest control booking voice agent
+*n8n · VAPI · Cal.com · Google Calendar · Gmail*
+
+Four webhook workflows behind one voice agent, covering the whole booking lifecycle for a pest control
+company: check availability, book, look up an existing appointment, reschedule or cancel.
+
+```
+VAPI tool call → webhook per tool
+  check_availability → resolve spoken day/time in code (Asia/Qatar)
+                     → Cal.com /v2/slots → compare epoch ms → free? yes/no
+  book              → Google Calendar event → Gmail confirmation
+  look up           → Google Calendar getAll → match caller to event
+  reschedule/cancel → switch → update + email  |  delete + email
+```
+
+**One webhook per tool, not one endpoint with a mode flag.** The agent's tool list is the contract, so
+keeping the mapping one to one means a tool can change or fail without touching the others.
+
+**The date arithmetic is deliberately outside the model.** "Today", "tomorrow" and weekday names are
+resolved in code against a caller-supplied datetime context before Cal.com is touched. Models are
+unreliable at date maths, and a wrong date books a real van to a real address.
+
+Availability is decided by comparing epoch milliseconds, not formatted strings, so timezone rendering
+can never make a busy slot look free.
+
+**Known limitation:** Cal.com owns availability while Google Calendar owns the bookings, which is two
+sources of truth. It holds only because every booking arrives through this agent.
+
+## 13 · Outbound AI caller
+*Make · VAPI · gpt-4o · Deepgram · Apify · Airtable · Twilio · Google Meet*
+
+Works a lead list by phone: researches each business, rewrites the voice agent's script for that
+business, dials, then reads the transcript and books a meeting if the prospect agreed. Consumes the
+kind of list that [11](11-maps-lead-scraper) produces.
+
+```
+sheet row → clean business name → fetch website → HTML to text
+   → model extracts social URLs as JSON
+   → LinkedIn found?  yes → Apify scrapes the profile → richer research
+                      no  → website text only
+   → model writes a specific compliment (≤15 words) + pitch
+   → PATCH /assistant  (rewrite firstMessage + system prompt for THIS lead)
+   → POST /call → sleep → GET call → transcript
+   → model grades transcript → SCHEDULED | NOTBOOKED
+        NOTBOOKED → Airtable
+        SCHEDULED → Google Meet + Airtable + Twilio SMS with the link
+```
+
+**The agent is rewritten per lead, not merely prompted per lead.** The research is patched into the
+assistant itself before dialling, so the opening line is already specific when the prospect answers.
+
+**A model grades the call, not a keyword rule.** "Yeah, Tuesday works" and "sure, send something over"
+mean different things. The classifier collapses that judgement into one of two tokens, and everything
+downstream branches deterministically on the token.
+
+Deepgram `nova-2-phonecall` is chosen because phone audio is narrowband and a general transcription
+model drops names and numbers on it.
+
+**Known limitations:** completion is a fixed sleep rather than an end-of-call webhook, so a long call
+can be read early. There is no retry, no do-not-call list and no per-run cap; real outreach needs all
+three plus the consent and calling-hours rules of the jurisdiction being dialled.
+
 ---
 
 ## Stack
@@ -286,8 +354,10 @@ count reaching the requested maximum. Either one alone eventually costs you mone
 Leonardo.AI · RunwayML Gen-3
 **Data** Supabase (Postgres, Storage, Edge Functions) · Google Sheets · n8n data tables
 **Documents & media** PDF.co · Transloadit · base64 / binary handling
-**Integrations** Google Geocoding + Places · Google Calendar · Google Drive · Cal.com · VAPI ·
-TCS courier API · AnyMailFinder · Instantly · Instagram · Facebook · LinkedIn · X
+**Speech** VAPI · Deepgram `nova-2-phonecall`
+**Integrations** Google Geocoding + Places · Google Calendar · Google Meet · Google Drive · Cal.com ·
+VAPI · Twilio · Airtable · Apify · TCS courier API · AnyMailFinder · Instantly · Instagram ·
+Facebook · LinkedIn · X
 
 ## Repo layout
 

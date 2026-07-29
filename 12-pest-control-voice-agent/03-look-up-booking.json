@@ -1,0 +1,156 @@
+{
+  "name": "Pest Control Co  Check Booking",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_ID",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -240,
+        -16
+      ],
+      "id": "8e65fd02-cfd4-4cb9-a780-7c1319592533",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "const CODE_VERSION = \"find_booking_prepare_v1_contact_flexible\";\n\nconst body = $json.body || $json;\nconst message = body.message || {};\n\nconst toolCall =\n  message.toolCalls?.[0] ||\n  message.toolCallList?.[0] ||\n  message.toolWithToolCallList?.[0]?.toolCall ||\n  null;\n\nconst toolCallId = toolCall?.id || $json.tool_call_id || null;\nconst toolName =\n  toolCall?.function?.name ||\n  $json.tool_name ||\n  \"find_booking\";\n\nlet args = $json.args || toolCall?.function?.arguments || {};\n\nif (typeof args === \"string\") {\n  try {\n    args = JSON.parse(args);\n  } catch (error) {\n    args = {};\n  }\n}\n\nconst customerName = String(args.customer_name || \"\").trim();\nconst city = String(args.city || \"\").trim();\nconst cityLower = city.toLowerCase();\n\nconst contactIdentifierRaw = String(\n  args.contact_identifier ||\n  args.phone_number ||\n  args.phone ||\n  args.email ||\n  \"\"\n).trim();\n\nconst currentAppointmentDateRaw = String(args.current_appointment_date || \"\").trim();\nconst currentAppointmentTimeRaw = String(args.current_appointment_time || \"\").trim();\nconst currentContext = String(args.current_datetime_context || \"\").trim();\n\nfunction getTimeZoneName(cityText) {\n  const city = String(cityText || \"\").toLowerCase();\n\n  if (city.includes(\"doha\")) return \"Asia/Qatar\";\n\n  return \"America/Chicago\";\n}\n\nfunction getTimezoneOffset(cityText) {\n  const city = String(cityText || \"\").toLowerCase();\n\n  if (city.includes(\"doha\")) return \"+03:00\";\n\n  return \"-05:00\";\n}\n\nconst timeZone = getTimeZoneName(city);\nconst timezoneOffset = getTimezoneOffset(city);\n\nfunction pad(num) {\n  return String(num).padStart(2, \"0\");\n}\n\nfunction offsetToMinutes(offset) {\n  if (!offset || offset === \"Z\") return 0;\n\n  const sign = offset.startsWith(\"-\") ? -1 : 1;\n  const [hours, minutes] = offset.slice(1).split(\":\").map(Number);\n\n  return sign * (hours * 60 + minutes);\n}\n\nfunction fromTimestampToLocalParts(timestampMs, offset) {\n  const localMs = timestampMs + offsetToMinutes(offset) * 60 * 1000;\n  const localDate = new Date(localMs);\n\n  return {\n    year: localDate.getUTCFullYear(),\n    month: localDate.getUTCMonth(),\n    day: localDate.getUTCDate(),\n    hour: localDate.getUTCHours(),\n    minute: localDate.getUTCMinutes()\n  };\n}\n\nfunction toIso(parts, offset) {\n  return `${parts.year}-${pad(parts.month + 1)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}:00${offset}`;\n}\n\nfunction toUtcIso(localIsoWithOffset) {\n  const date = new Date(localIsoWithOffset);\n\n  if (isNaN(date.getTime())) {\n    throw new Error(\"Invalid local ISO date: \" + localIsoWithOffset);\n  }\n\n  return date.toISOString();\n}\n\nfunction addHours(parts, hours, offset) {\n  const timestamp = new Date(toIso(parts, offset)).getTime();\n  return fromTimestampToLocalParts(timestamp + hours * 60 * 60 * 1000, offset);\n}\n\nfunction addDays(parts, days, offset) {\n  const timestamp = new Date(toIso(parts, offset)).getTime();\n  return fromTimestampToLocalParts(timestamp + days * 24 * 60 * 60 * 1000, offset);\n}\n\nfunction parseCurrentContext(text, offset) {\n  const value = String(text || \"\")\n    .replace(/[\\u200B-\\u200D\\uFEFF]/g, \"\")\n    .trim();\n\n  if (!value) {\n    return {\n      parts: fromTimestampToLocalParts(Date.now(), offset),\n      warning: \"Missing current_datetime_context. Used server time as fallback.\"\n    };\n  }\n\n  const isoMatch = value.match(\n    /^(\\d{4})-(\\d{2})-(\\d{2})[T\\s](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?$/\n  );\n\n  if (isoMatch) {\n    return {\n      parts: {\n        year: Number(isoMatch[1]),\n        month: Number(isoMatch[2]) - 1,\n        day: Number(isoMatch[3]),\n        hour: Number(isoMatch[4]),\n        minute: Number(isoMatch[5])\n      },\n      warning: null\n    };\n  }\n\n  const humanMatch = value.match(\n    /(?:[A-Za-z]+,\\s*)?([A-Za-z]+)\\s+(\\d{1,2}),\\s+(\\d{4}),\\s+(\\d{1,2}):(\\d{2})\\s*(AM|PM)/i\n  );\n\n  if (humanMatch) {\n    const monthNames = {\n      january: 0,\n      february: 1,\n      march: 2,\n      april: 3,\n      may: 4,\n      june: 5,\n      july: 6,\n      august: 7,\n      september: 8,\n      october: 9,\n      november: 10,\n      december: 11\n    };\n\n    const month = monthNames[humanMatch[1].toLowerCase()];\n    const day = Number(humanMatch[2]);\n    const year = Number(humanMatch[3]);\n    let hour = Number(humanMatch[4]);\n    const minute = Number(humanMatch[5]);\n    const ampm = humanMatch[6].toLowerCase();\n\n    if (ampm === \"pm\" && hour < 12) hour += 12;\n    if (ampm === \"am\" && hour === 12) hour = 0;\n\n    return {\n      parts: { year, month, day, hour, minute },\n      warning: null\n    };\n  }\n\n  return {\n    parts: fromTimestampToLocalParts(Date.now(), offset),\n    warning: `Could not parse current_datetime_context: ${value}. Used server time as fallback.`\n  };\n}\n\nfunction getLocalDayOfWeek(parts) {\n  return new Date(Date.UTC(parts.year, parts.month, parts.day)).getUTCDay();\n}\n\nfunction getNextWeekdayInfo(currentDayStart, targetWeekday, preferredDayText, offset) {\n  const currentWeekday = getLocalDayOfWeek(currentDayStart);\n\n  let daysToAdd = targetWeekday - currentWeekday;\n\n  if (daysToAdd < 0) {\n    daysToAdd += 7;\n  }\n\n  if (daysToAdd === 0 && preferredDayText.includes(\"next\")) {\n    daysToAdd = 7;\n  }\n\n  return addDays(currentDayStart, daysToAdd, offset);\n}\n\nfunction parseAppointmentDate(dateText, currentDayStart, offset) {\n  const text = String(dateText || \"\").trim().toLowerCase();\n\n  const monthNames = {\n    january: 0,\n    february: 1,\n    march: 2,\n    april: 3,\n    may: 4,\n    june: 5,\n    july: 6,\n    august: 7,\n    september: 8,\n    october: 9,\n    november: 10,\n    december: 11\n  };\n\n  const monthPattern = Object.keys(monthNames).join(\"|\");\n\n  const fullDateMatch = text.match(\n    new RegExp(`(${monthPattern})\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?(?:,\\\\s*|\\\\s+)(\\\\d{4})`, \"i\")\n  );\n\n  if (fullDateMatch) {\n    return {\n      year: Number(fullDateMatch[3]),\n      month: monthNames[fullDateMatch[1].toLowerCase()],\n      day: Number(fullDateMatch[2]),\n      hour: 0,\n      minute: 0\n    };\n  }\n\n  const isoDateMatch = text.match(/\\d{4}-\\d{2}-\\d{2}/);\n\n  if (isoDateMatch) {\n    const [year, month, day] = isoDateMatch[0].split(\"-\").map(Number);\n\n    return {\n      year,\n      month: month - 1,\n      day,\n      hour: 0,\n      minute: 0\n    };\n  }\n\n  if (text.includes(\"today\")) {\n    return { ...currentDayStart };\n  }\n\n  if (text.includes(\"day after tomorrow\")) {\n    return addDays(currentDayStart, 2, offset);\n  }\n\n  if (text.includes(\"tomorrow\")) {\n    return addDays(currentDayStart, 1, offset);\n  }\n\n  const weekdays = {\n    sunday: 0,\n    monday: 1,\n    tuesday: 2,\n    wednesday: 3,\n    thursday: 4,\n    friday: 5,\n    saturday: 6\n  };\n\n  for (const [weekdayName, weekdayNumber] of Object.entries(weekdays)) {\n    if (text.includes(weekdayName)) {\n      return getNextWeekdayInfo(currentDayStart, weekdayNumber, text, offset);\n    }\n  }\n\n  return { ...currentDayStart };\n}\n\nfunction parseAppointmentTime(timeText) {\n  const text = String(timeText || \"\").trim().toLowerCase();\n\n  const match = text.match(/(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?/i);\n\n  if (!match) {\n    throw new Error(\"Could not parse current_appointment_time: \" + timeText);\n  }\n\n  let hour = Number(match[1]);\n  const minute = match[2] ? Number(match[2]) : 0;\n  const ampm = match[3]?.toLowerCase();\n\n  if (!ampm && hour >= 1 && hour <= 7) {\n    hour += 12;\n  }\n\n  if (ampm === \"pm\" && hour < 12) hour += 12;\n  if (ampm === \"am\" && hour === 12) hour = 0;\n\n  return { hour, minute };\n}\n\nfunction extractContactInfo(args, rawContact) {\n  const combined = [\n    rawContact,\n    args.email,\n    args.phone,\n    args.phone_number\n  ]\n    .filter(Boolean)\n    .join(\" \")\n    .trim();\n\n  const emailMatch = combined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\n  const email = emailMatch ? emailMatch[0].toLowerCase() : \"\";\n\n  const withoutEmail = combined.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, \" \");\n  const phoneMatch = withoutEmail.match(/\\+?\\d[\\d\\s().-]{5,}\\d/);\n  const phoneNumber = phoneMatch ? phoneMatch[0].trim() : \"\";\n  const phoneDigits = phoneNumber ? phoneNumber.replace(/\\D/g, \"\") : \"\";\n\n  let contactType = \"unknown\";\n  if (email && phoneDigits) contactType = \"both\";\n  else if (email) contactType = \"email\";\n  else if (phoneDigits) contactType = \"phone\";\n\n  return {\n    contact_identifier_raw: combined,\n    contact_type: contactType,\n    email,\n    phone_number: phoneNumber,\n    phone_digits: phoneDigits\n  };\n}\n\nconst parsedCurrent = parseCurrentContext(currentContext, timezoneOffset);\nconst current = parsedCurrent.parts;\n\nconst currentDayStart = {\n  year: current.year,\n  month: current.month,\n  day: current.day,\n  hour: 0,\n  minute: 0\n};\n\nconst appointmentDate = parseAppointmentDate(\n  currentAppointmentDateRaw,\n  currentDayStart,\n  timezoneOffset\n);\n\nconst appointmentTime = parseAppointmentTime(currentAppointmentTimeRaw);\n\nconst appointmentStart = {\n  year: appointmentDate.year,\n  month: appointmentDate.month,\n  day: appointmentDate.day,\n  hour: appointmentTime.hour,\n  minute: appointmentTime.minute\n};\n\nconst appointmentEnd = addHours(appointmentStart, 1, timezoneOffset);\n\nconst searchDayStart = {\n  year: appointmentDate.year,\n  month: appointmentDate.month,\n  day: appointmentDate.day,\n  hour: 0,\n  minute: 0\n};\n\nconst searchDayEnd = addDays(searchDayStart, 1, timezoneOffset);\n\nconst appointmentStartLocal = toIso(appointmentStart, timezoneOffset);\nconst appointmentEndLocal = toIso(appointmentEnd, timezoneOffset);\n\nconst searchStartLocal = toIso(searchDayStart, timezoneOffset);\nconst searchEndLocal = toIso(searchDayEnd, timezoneOffset);\n\nconst contact = extractContactInfo(args, contactIdentifierRaw);\n\nreturn [\n  {\n    json: {\n      code_version: CODE_VERSION,\n\n      tool_name: toolName,\n      tool_call_id: toolCallId,\n\n      customer_name: customerName,\n      customer_name_normalized: customerName.toLowerCase(),\n\n      city,\n      city_lower: cityLower,\n      timeZone,\n      timezoneOffset,\n\n      contact_identifier: contact.contact_identifier_raw,\n      contact_type: contact.contact_type,\n      email: contact.email,\n      phone_number: contact.phone_number,\n      phone_digits: contact.phone_digits,\n\n      current_appointment_date_received: currentAppointmentDateRaw,\n      current_appointment_time_received: currentAppointmentTimeRaw,\n\n      current_datetime_context_received: currentContext,\n      current_datetime_parse_warning: parsedCurrent.warning,\n      current_local: toIso(current, timezoneOffset),\n\n      appointment_start_local: appointmentStartLocal,\n      appointment_end_local: appointmentEndLocal,\n      appointment_start_utc: toUtcIso(appointmentStartLocal),\n      appointment_end_utc: toUtcIso(appointmentEndLocal),\n\n      search_start_local: searchStartLocal,\n      search_end_local: searchEndLocal,\n      search_start_utc: toUtcIso(searchStartLocal),\n      search_end_utc: toUtcIso(searchEndLocal),\n\n      appointment_time_label: `${currentAppointmentDateRaw} at ${currentAppointmentTimeRaw}`\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -16
+      ],
+      "id": "9391f178-f5f0-4693-a220-714589f14c5e",
+      "name": "Prepare Find Booking Data"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "",
+          "cachedResultUrl": ""
+        },
+        "returnAll": true,
+        "timeMin": "={{ $('Prepare Find Booking Data').item.json.search_start_utc }}",
+        "timeMax": "={{ $('Prepare Find Booking Data').item.json.search_end_utc }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        48,
+        -16
+      ],
+      "id": "7e0ce717-4005-4f13-9822-9e65f6f09710",
+      "name": "Get many events"
+    },
+    {
+      "parameters": {
+        "jsCode": "const CODE_VERSION = \"find_booking_match_v2\";\n\nconst prep = $(\"Prepare Find Booking Data\").first().json;\n\n// Google Calendar may return multiple events as separate items\nconst events = $input\n  .all()\n  .map(item => item.json)\n  .filter(event => event && event.id);\n\nfunction normalizeText(value) {\n  return String(value || \"\").toLowerCase().trim();\n}\n\nfunction normalizeDigits(value) {\n  return String(value || \"\").replace(/\\D/g, \"\");\n}\n\nfunction getEventText(event) {\n  return [\n    event.summary,\n    event.description,\n    event.location,\n    event.attendees?.map(a => a.email).join(\" \")\n  ]\n    .filter(Boolean)\n    .join(\" \")\n    .toLowerCase();\n}\n\nfunction getEventStart(event) {\n  return event.start?.dateTime || event.start?.date || \"\";\n}\n\nfunction getEventEnd(event) {\n  return event.end?.dateTime || event.end?.date || \"\";\n}\n\nfunction getTimeDifferenceMinutes(eventStartIso, expectedStartIso) {\n  const eventTime = new Date(eventStartIso).getTime();\n  const expectedTime = new Date(expectedStartIso).getTime();\n\n  if (isNaN(eventTime) || isNaN(expectedTime)) return null;\n\n  return Math.abs(eventTime - expectedTime) / 60000;\n}\n\nfunction extractFromDescription(description, label) {\n  const regex = new RegExp(`${label}:\\\\s*(.+)`, \"i\");\n  const match = String(description || \"\").match(regex);\n\n  if (!match) return \"\";\n\n  return match[1].split(\"\\n\")[0].trim();\n}\n\nfunction extractEmail(event) {\n  const text = getEventText(event);\n  const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i);\n\n  return match ? match[0].toLowerCase() : \"\";\n}\n\nfunction extractPhone(event) {\n  const phone = extractFromDescription(event.description, \"Phone\");\n  return phone || \"\";\n}\n\nfunction extractPhoneDigits(event) {\n  return normalizeDigits(extractPhone(event));\n}\n\nconst expectedStartUtc = prep.appointment_start_utc;\nconst customerName = normalizeText(prep.customer_name);\nconst customerNameParts = customerName.split(/\\s+/).filter(Boolean);\nconst email = normalizeText(prep.email);\nconst phoneDigits = normalizeDigits(prep.phone_digits);\nconst city = normalizeText(prep.city);\n\nconst scoredMatches = events.map(event => {\n  const eventText = getEventText(event);\n  const eventStart = getEventStart(event);\n  const eventEnd = getEventEnd(event);\n  const eventPhoneDigits = extractPhoneDigits(event);\n\n  const timeDiffMinutes = getTimeDifferenceMinutes(eventStart, expectedStartUtc);\n\n  let score = 0;\n  const reasons = [];\n\n  if (timeDiffMinutes !== null && timeDiffMinutes <= 30) {\n    score += 5;\n    reasons.push(\"time_match\");\n  }\n\n  const nameMatch =\n    customerName &&\n    (\n      eventText.includes(customerName) ||\n      customerNameParts.every(part => eventText.includes(part))\n    );\n\n  if (nameMatch) {\n    score += 3;\n    reasons.push(\"name_match\");\n  }\n\n  if (email && eventText.includes(email)) {\n    score += 5;\n    reasons.push(\"email_match\");\n  }\n\n  if (phoneDigits && eventPhoneDigits.includes(phoneDigits)) {\n    score += 5;\n    reasons.push(\"phone_match\");\n  }\n\n  if (city && eventText.includes(city)) {\n    score += 1;\n    reasons.push(\"city_match\");\n  }\n\n  return {\n    event,\n    score,\n    reasons,\n    eventStart,\n    eventEnd,\n    timeDiffMinutes\n  };\n})\n.filter(item => item.score >= 7)\n.sort((a, b) => b.score - a.score);\n\nlet result;\n\nif (scoredMatches.length === 0) {\n  result = {\n    booking_found: false,\n    multiple_possible_bookings: false,\n    message: \"No matching booking was found.\",\n    lookup: {\n      customer_name: prep.customer_name,\n      contact_type: prep.contact_type,\n      email: prep.email || null,\n      phone_number: prep.phone_number || null,\n      city: prep.city,\n      expected_appointment_start: prep.appointment_start_local,\n      appointment_time_label: prep.appointment_time_label\n    }\n  };\n} else if (scoredMatches.length > 1) {\n  result = {\n    booking_found: false,\n    multiple_possible_bookings: true,\n    message: \"Multiple possible bookings were found. Please confirm the correct appointment.\",\n    possible_bookings: scoredMatches.slice(0, 3).map(item => ({\n      calendar_event_id: item.event.id,\n      appointment_start: item.eventStart,\n      appointment_end: item.eventEnd,\n      title: item.event.summary || \"\",\n      city: prep.city\n    }))\n  };\n} else {\n  const matched = scoredMatches[0];\n  const event = matched.event;\n\n  const customerEmail =\n    prep.email ||\n    extractEmail(event) ||\n    \"\";\n\n  const customerPhone =\n    prep.phone_number ||\n    extractPhone(event) ||\n    \"\";\n\n  result = {\n    booking_found: true,\n    multiple_possible_bookings: false,\n    message: \"Booking found.\",\n\n    booking_id: event.id,\n    calendar_event_id: event.id,\n\n    customer_name: prep.customer_name,\n    contact_type: prep.contact_type,\n    email: customerEmail || null,\n    phone_number: customerPhone || null,\n    phone_digits: normalizeDigits(customerPhone) || prep.phone_digits || null,\n\n    city: prep.city,\n    pest_issue: extractFromDescription(event.description, \"Pest Issue\") || null,\n    urgency: extractFromDescription(event.description, \"Urgency\") || null,\n    service_address: extractFromDescription(event.description, \"Service Address\") || null,\n    property_type: extractFromDescription(event.description, \"Property Type\") || null,\n    notes: extractFromDescription(event.description, \"Notes\") || null,\n    safety_notes: extractFromDescription(event.description, \"Safety Notes\") || null,\n\n    old_appointment_start: matched.eventStart,\n    old_appointment_end: matched.eventEnd,\n    old_appointment_time_label: prep.appointment_time_label,\n\n    match_score: matched.score,\n    match_reasons: matched.reasons\n  };\n}\n\nreturn [\n  {\n    json: {\n      code_version: CODE_VERSION,\n      results: [\n        {\n          toolCallId: prep.tool_call_id,\n          result: JSON.stringify(result)\n        }\n      ]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        -16
+      ],
+      "id": "416de52d-2b6d-4e8e-8f9b-cfad155d62c8",
+      "name": "Match Booking"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { results: $json.results } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        320,
+        -16
+      ],
+      "id": "1f6f1dbb-7c3b-4b7e-b286-c62381dc984d",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Find Booking Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Find Booking Data": {
+      "main": [
+        [
+          {
+            "node": "Get many events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many events": {
+      "main": [
+        [
+          {
+            "node": "Match Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Booking": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7603c836-d823-476a-9aaa-26a185861baf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "G9ECMLJnOeOhfAtX",
+  "tags": []
+}

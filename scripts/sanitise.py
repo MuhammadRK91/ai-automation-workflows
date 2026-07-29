@@ -45,7 +45,10 @@ RESOURCE_ID_KEY = re.compile(
     # Anchored, so compound names need spelling out: dataTableId does not match
     # "table[_-]?id" because it begins with "data".
     r"^(?:(?:document|sheet|spreadsheet|folder|drive|file|calendar|database|table|base|"
-    r"data[_-]?table|project|team|channel|chat|assistant|vector[_-]?store)[_-]?id"
+    r"data[_-]?table|project|team|channel|chat|assistant|vector[_-]?store|"
+    # Voice-provider resources. A VAPI scenario names the assistant AND the phone
+    # number it dials from; redacting only the assistant leaves half the pair.
+    r"phone[_-]?number|voice|actor)[_-]?id"
     r"|(?:campaign|workspace|audience|segment|mailbox)(?:[_-]?id)?)$",
     re.IGNORECASE,
 )
@@ -103,6 +106,16 @@ PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     ("n8n webhook",        re.compile(r"https?://[A-Za-z0-9.-]+/webhook(?:-test)?/[0-9a-fA-F-]{16,}"), "https://YOUR_N8N_HOST/webhook/YOUR_WEBHOOK_ID"),
     ("hex secret",         re.compile(r"\b[0-9a-f]{32,}\b"), "YOUR_SECRET"),
     ("email address",      re.compile(r"\b[A-Za-z0-9._%+-]+@(?!example\.com)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "you@example.com"),
+    # A test call target left in a flow is a real phone number in a public repo.
+    # Matched on shape, not on key name: the outbound-caller export carried it as a
+    # bare "number" value inside an embedded JSON body, where no key name gave it away.
+    ("E.164 phone number", re.compile(r"(?<![\d+])\+\d{9,15}\b"), "+10000000000"),
+    # Airtable base/table/record ids identify a live workspace. Not credentials, but
+    # they name someone's data, and they survive every key-name-based rule.
+    # The digit is required: without it "appendAttribution" (an n8n Gmail option key)
+    # matches as app + 14 chars, and a sanitiser that corrupts config is worse than one
+    # that misses. Real Airtable ids are always mixed alphanumeric.
+    ("Airtable id",        re.compile(r"\b(?:app|tbl|rec|viw|fld)(?=[A-Za-z0-9]{14}\b)[A-Za-z]*[0-9][A-Za-z0-9]*\b"), "YOUR_AIRTABLE_ID"),
 ]
 
 # Public vendor API endpoints. Keeping them is the point — they document the stack —

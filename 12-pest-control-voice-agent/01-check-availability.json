@@ -1,0 +1,180 @@
+{
+  "name": "Pest Control Co  Availability",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "YOUR_WEBHOOK_ID",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -192,
+        -48
+      ],
+      "id": "92d01698-7b0b-4c26-b139-7f625204f497",
+      "name": "Webhook",
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "const CODE_VERSION = \"check_availability_v6_weekday_support_final\";\n\nconst body = $json.body || $json;\nconst message = body.message || {};\n\nconst toolCall =\n  message.toolCalls?.[0] ||\n  message.toolCallList?.[0] ||\n  message.toolWithToolCallList?.[0]?.toolCall ||\n  null;\n\nconst toolCallId = toolCall?.id || $json.tool_call_id || null;\nconst toolName =\n  toolCall?.function?.name ||\n  $json.tool_name ||\n  \"check_availability\";\n\nlet args = $json.args || toolCall?.function?.arguments || {};\n\nif (typeof args === \"string\") {\n  try {\n    args = JSON.parse(args);\n  } catch (error) {\n    args = {};\n  }\n}\n\nconst city = String(args.city || $json.city || \"\").trim().toLowerCase();\nconst preferredDayRaw = args.preferred_day || $json.preferred_day || \"today\";\nconst preferredTimeRaw = args.preferred_time || $json.preferred_time || \"\";\nconst currentContext =\n  args.current_datetime_context ||\n  $json.current_datetime_context ||\n  \"\";\n\nconst preferredDay = String(preferredDayRaw).trim().toLowerCase();\nconst preferredTime = String(preferredTimeRaw).trim().toLowerCase();\n\nconst CAL_USERNAME = \"mrk-91\";\nconst CAL_EVENT_TYPE_SLUG = \"safenest-pest-control\";\n\nfunction getTimeZoneName(cityText) {\n  if (cityText.includes(\"doha\")) return \"Asia/Qatar\";\n  return \"America/Chicago\";\n}\n\nfunction getTimezoneOffset(cityText) {\n  if (cityText.includes(\"doha\")) return \"+03:00\";\n  return \"-05:00\";\n}\n\nconst calTimeZone = getTimeZoneName(city);\nconst timezoneOffset = getTimezoneOffset(city);\n\nfunction pad(num) {\n  return String(num).padStart(2, \"0\");\n}\n\nfunction offsetToMinutes(offset) {\n  if (!offset || offset === \"Z\") return 0;\n\n  const sign = offset.startsWith(\"-\") ? -1 : 1;\n  const [hours, minutes] = offset.slice(1).split(\":\").map(Number);\n\n  return sign * (hours * 60 + minutes);\n}\n\nfunction fromTimestampToLocalParts(timestampMs, offset) {\n  const localMs = timestampMs + offsetToMinutes(offset) * 60 * 1000;\n  const localDate = new Date(localMs);\n\n  return {\n    year: localDate.getUTCFullYear(),\n    month: localDate.getUTCMonth(),\n    day: localDate.getUTCDate(),\n    hour: localDate.getUTCHours(),\n    minute: localDate.getUTCMinutes()\n  };\n}\n\nfunction parseCurrentContext(text, offset) {\n  const value = String(text || \"\")\n    .replace(/[\\u200B-\\u200D\\uFEFF]/g, \"\")\n    .trim();\n\n  if (!value) {\n    return {\n      parts: fromTimestampToLocalParts(Date.now(), offset),\n      warning: \"Missing current_datetime_context. Used server time as fallback.\"\n    };\n  }\n\n  // ISO format support\n  // Example: 2026-05-21T07:35:00+03:00\n  const isoMatch = value.match(\n    /^(\\d{4})-(\\d{2})-(\\d{2})[T\\s](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?$/\n  );\n\n  if (isoMatch) {\n    return {\n      parts: {\n        year: Number(isoMatch[1]),\n        month: Number(isoMatch[2]) - 1,\n        day: Number(isoMatch[3]),\n        hour: Number(isoMatch[4]),\n        minute: Number(isoMatch[5])\n      },\n      warning: null\n    };\n  }\n\n  // Human-readable format support\n  // Example: Thursday, May 21, 2026, 07:35 AM\n  const humanMatch = value.match(\n    /(?:[A-Za-z]+,\\s*)?([A-Za-z]+)\\s+(\\d{1,2}),\\s+(\\d{4}),\\s+(\\d{1,2}):(\\d{2})\\s*(AM|PM)/i\n  );\n\n  if (humanMatch) {\n    const monthNames = {\n      january: 0,\n      february: 1,\n      march: 2,\n      april: 3,\n      may: 4,\n      june: 5,\n      july: 6,\n      august: 7,\n      september: 8,\n      october: 9,\n      november: 10,\n      december: 11\n    };\n\n    const month = monthNames[humanMatch[1].toLowerCase()];\n    const day = Number(humanMatch[2]);\n    const year = Number(humanMatch[3]);\n    let hour = Number(humanMatch[4]);\n    const minute = Number(humanMatch[5]);\n    const ampm = humanMatch[6].toLowerCase();\n\n    if (ampm === \"pm\" && hour < 12) hour += 12;\n    if (ampm === \"am\" && hour === 12) hour = 0;\n\n    return {\n      parts: { year, month, day, hour, minute },\n      warning: null\n    };\n  }\n\n  return {\n    parts: fromTimestampToLocalParts(Date.now(), offset),\n    warning: `Could not parse current_datetime_context: ${value}. Used server time as fallback.`\n  };\n}\n\nfunction toIso(parts, offset) {\n  return `${parts.year}-${pad(parts.month + 1)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}:00${offset}`;\n}\n\nfunction toUtcIso(localIsoWithOffset) {\n  const date = new Date(localIsoWithOffset);\n\n  if (isNaN(date.getTime())) {\n    throw new Error(\"Invalid local ISO date: \" + localIsoWithOffset);\n  }\n\n  return date.toISOString();\n}\n\nfunction addHours(parts, hours, offset) {\n  const timestamp = new Date(toIso(parts, offset)).getTime();\n  return fromTimestampToLocalParts(timestamp + hours * 60 * 60 * 1000, offset);\n}\n\nfunction addDays(parts, days, offset) {\n  const timestamp = new Date(toIso(parts, offset)).getTime();\n  return fromTimestampToLocalParts(timestamp + days * 24 * 60 * 60 * 1000, offset);\n}\n\nfunction getLocalDayOfWeek(parts) {\n  // Sunday = 0, Monday = 1, Tuesday = 2, Wednesday = 3, Thursday = 4, Friday = 5, Saturday = 6\n  return new Date(Date.UTC(parts.year, parts.month, parts.day)).getUTCDay();\n}\n\nfunction getNextWeekdayInfo(currentDayStart, targetWeekday, preferredDayText, offset) {\n  const currentWeekday = getLocalDayOfWeek(currentDayStart);\n\n  let daysToAdd = targetWeekday - currentWeekday;\n\n  if (daysToAdd < 0) {\n    daysToAdd += 7;\n  }\n\n  if (daysToAdd === 0 && preferredDayText.includes(\"next\")) {\n    daysToAdd = 7;\n  }\n\n  return {\n    requestedDayStart: addDays(currentDayStart, daysToAdd, offset),\n    daysToAdd\n  };\n}\n\nfunction resolvePreferredDay(preferredDayText, currentDayStart, offset) {\n  const dayText = String(preferredDayText || \"\").trim().toLowerCase();\n\n  if (dayText === \"today\" || dayText.includes(\"today\")) {\n    return {\n      requestedDayStart: { ...currentDayStart },\n      isTodayRequest: true,\n      resolved_day_reason: \"today\"\n    };\n  }\n\n  if (dayText.includes(\"day after tomorrow\")) {\n    return {\n      requestedDayStart: addDays(currentDayStart, 2, offset),\n      isTodayRequest: false,\n      resolved_day_reason: \"day_after_tomorrow\"\n    };\n  }\n\n  if (dayText.includes(\"tomorrow\")) {\n    return {\n      requestedDayStart: addDays(currentDayStart, 1, offset),\n      isTodayRequest: false,\n      resolved_day_reason: \"tomorrow\"\n    };\n  }\n\n  const isoDateMatch = dayText.match(/\\d{4}-\\d{2}-\\d{2}/);\n\n  if (isoDateMatch) {\n    const [year, month, day] = isoDateMatch[0].split(\"-\").map(Number);\n\n    return {\n      requestedDayStart: {\n        year,\n        month: month - 1,\n        day,\n        hour: 0,\n        minute: 0\n      },\n      isTodayRequest: false,\n      resolved_day_reason: \"specific_iso_date\"\n    };\n  }\n\n  const weekdays = {\n    sunday: 0,\n    monday: 1,\n    tuesday: 2,\n    wednesday: 3,\n    thursday: 4,\n    friday: 5,\n    saturday: 6\n  };\n\n  for (const [weekdayName, weekdayNumber] of Object.entries(weekdays)) {\n    if (dayText.includes(weekdayName)) {\n      const result = getNextWeekdayInfo(\n        currentDayStart,\n        weekdayNumber,\n        dayText,\n        offset\n      );\n\n      return {\n        requestedDayStart: result.requestedDayStart,\n        isTodayRequest: result.daysToAdd === 0,\n        resolved_day_reason: weekdayName\n      };\n    }\n  }\n\n  return {\n    requestedDayStart: { ...currentDayStart },\n    isTodayRequest: true,\n    resolved_day_reason: \"fallback_today\"\n  };\n}\n\nfunction isWeekend(parts) {\n  const dayOfWeek = getLocalDayOfWeek(parts);\n  return dayOfWeek === 0 || dayOfWeek === 6;\n}\n\nfunction parsePreferredTime(timeText) {\n  const text = String(timeText || \"\").trim().toLowerCase();\n\n  if (\n    text.includes(\"earliest\") ||\n    text.includes(\"next available\") ||\n    text.includes(\"any time\") ||\n    text.includes(\"anytime\")\n  ) {\n    return null;\n  }\n\n  const match = text.match(/(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?/i);\n\n  if (!match) return null;\n\n  let hour = Number(match[1]);\n  const minute = match[2] ? Number(match[2]) : 0;\n  const ampm = match[3]?.toLowerCase();\n\n  if (!ampm && hour >= 1 && hour <= 7) {\n    hour += 12;\n  }\n\n  if (ampm === \"pm\" && hour < 12) hour += 12;\n  if (ampm === \"am\" && hour === 12) hour = 0;\n\n  return { hour, minute };\n}\n\nfunction compareDateTime(a, b) {\n  const aValue = Number(\n    `${a.year}${pad(a.month + 1)}${pad(a.day)}${pad(a.hour)}${pad(a.minute)}`\n  );\n\n  const bValue = Number(\n    `${b.year}${pad(b.month + 1)}${pad(b.day)}${pad(b.hour)}${pad(b.minute)}`\n  );\n\n  if (aValue < bValue) return -1;\n  if (aValue > bValue) return 1;\n  return 0;\n}\n\nconst parsedCurrent = parseCurrentContext(currentContext, timezoneOffset);\nconst current = parsedCurrent.parts;\n\nconst earliestAllowed = addHours(current, 4, timezoneOffset);\n\nconst currentDayStart = {\n  year: current.year,\n  month: current.month,\n  day: current.day,\n  hour: 0,\n  minute: 0\n};\n\nconst resolvedDay = resolvePreferredDay(\n  preferredDay,\n  currentDayStart,\n  timezoneOffset\n);\n\nconst requestedDayStart = resolvedDay.requestedDayStart;\nconst isToday = resolvedDay.isTodayRequest;\n\nlet rangeStart = { ...requestedDayStart };\n\nlet rangeEnd = addDays(requestedDayStart, 3, timezoneOffset);\nrangeEnd.hour = 0;\nrangeEnd.minute = 0;\n\nif (isToday) {\n  rangeStart = earliestAllowed;\n}\n\nconst parsedPreferredTime = parsePreferredTime(preferredTime);\n\nlet preferredDateTime = null;\nlet preferredTimeIsValid = true;\nlet preferredTimeInvalidReason = null;\n\nif (parsedPreferredTime) {\n  preferredDateTime = {\n    year: requestedDayStart.year,\n    month: requestedDayStart.month,\n    day: requestedDayStart.day,\n    hour: parsedPreferredTime.hour,\n    minute: parsedPreferredTime.minute\n  };\n\n  if (compareDateTime(preferredDateTime, earliestAllowed) < 0) {\n    preferredTimeIsValid = false;\n    preferredTimeInvalidReason =\n      \"Preferred time is less than 4 hours from current local time.\";\n  }\n\n  if (isWeekend(preferredDateTime)) {\n    preferredTimeIsValid = false;\n    preferredTimeInvalidReason =\n      \"Preferred day is Saturday or Sunday. Service visits are Monday to Friday only.\";\n  }\n}\n\nconst startLocal = toIso(rangeStart, timezoneOffset);\nconst endLocal = toIso(rangeEnd, timezoneOffset);\n\nconst preferredDateTimeLocal = preferredDateTime\n  ? toIso(preferredDateTime, timezoneOffset)\n  : null;\n\nconst calStart = toUtcIso(startLocal);\nconst calEnd = toUtcIso(endLocal);\n\nconst preferredDateTimeUtc = preferredDateTimeLocal\n  ? toUtcIso(preferredDateTimeLocal)\n  : null;\n\nreturn [\n  {\n    json: {\n      code_version: CODE_VERSION,\n\n      tool_name: toolName,\n      tool_call_id: toolCallId,\n\n      username: CAL_USERNAME,\n      eventTypeSlug: CAL_EVENT_TYPE_SLUG,\n\n      start: calStart,\n      end: calEnd,\n      timeZone: calTimeZone,\n      format: \"range\",\n\n      preferred_datetime_utc: preferredDateTimeUtc,\n      preferred_time_is_valid: preferredTimeIsValid,\n      preferred_time_invalid_reason: preferredTimeInvalidReason,\n\n      city,\n      preferred_day_received: preferredDayRaw,\n      preferred_time_received: preferredTimeRaw,\n      resolved_day_reason: resolvedDay.resolved_day_reason,\n\n      current_datetime_context_received: currentContext,\n      current_datetime_parse_warning: parsedCurrent.warning,\n\n      current_local: toIso(current, timezoneOffset),\n      earliest_allowed_local: toIso(earliestAllowed, timezoneOffset),\n      requested_day_start_local: toIso(requestedDayStart, timezoneOffset),\n      range_start_local: startLocal,\n      range_end_local: endLocal,\n      preferred_datetime_local: preferredDateTimeLocal\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -48
+      ],
+      "id": "0399de31-e9e1-42f6-ab4c-18327257e076",
+      "name": "Build Date Range"
+    },
+    {
+      "parameters": {
+        "url": "https://api.cal.com/v2/slots",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "start",
+              "value": "={{ $json.start }}"
+            },
+            {
+              "name": "end",
+              "value": "={{ $json.end }}"
+            },
+            {
+              "name": "eventTypeSlug",
+              "value": "={{ $json.eventTypeSlug }}"
+            },
+            {
+              "name": "username",
+              "value": "={{ $json.username }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": ""
+            },
+            {
+              "name": "cal-api-version",
+              "value": "2024-09-04"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        112,
+        -48
+      ],
+      "id": "4fff65b2-6940-40fb-bf5c-5eed37201740",
+      "name": "Find Available Slots"
+    },
+    {
+      "parameters": {
+        "jsCode": "const buildData = $(\"Build Date Range\").first().json;\nconst calResponse = $json;\n\nconst toolName = buildData.tool_name || \"check_availability\";\nconst toolCallId = buildData.tool_call_id;\n\nconst preferredDateTimeUtc = buildData.preferred_datetime_utc;\nconst timeZone = buildData.timeZone || \"Asia/Qatar\";\n\n// Cal.com returns slots inside data, grouped by date\nconst data = calResponse.data || {};\n\nconst allSlotsUtc = [];\n\nfor (const dateKey of Object.keys(data)) {\n  const slots = data[dateKey] || [];\n\n  for (const slot of slots) {\n    if (slot.start) {\n      allSlotsUtc.push(slot.start);\n    }\n  }\n}\n\n// Compare exact time using timestamp\nconst desiredTime = preferredDateTimeUtc\n  ? new Date(preferredDateTimeUtc).getTime()\n  : null;\n\nconst reservationSuccess = allSlotsUtc.some(slot => {\n  return new Date(slot).getTime() === desiredTime;\n});\n\n// Convert UTC slot to Asia/Qatar style: YYYY-MM-DDTHH:MM:SS+03:00\nfunction formatToQatarTime(utcString) {\n  const date = new Date(utcString);\n\n  const qatarDate = new Date(date.getTime() + 3 * 60 * 60 * 1000);\n\n  const pad = (num) => String(num).padStart(2, \"0\");\n\n  const year = qatarDate.getUTCFullYear();\n  const month = pad(qatarDate.getUTCMonth() + 1);\n  const day = pad(qatarDate.getUTCDate());\n  const hour = pad(qatarDate.getUTCHours());\n  const minute = pad(qatarDate.getUTCMinutes());\n  const second = pad(qatarDate.getUTCSeconds());\n\n  return `${year}-${month}-${day}T${hour}:${minute}:${second}+03:00`;\n}\n\nconst availableSlots = allSlotsUtc.map(slot => {\n  return {\n    time: formatToQatarTime(slot)\n  };\n});\n\nconst result = {\n  reservation_success: reservationSuccess ? \"true\" : \"false\",\n  available_slots: availableSlots\n};\n\nreturn [\n  {\n    json: {\n      results: [\n        {\n          name: toolName,\n          toolCallId: toolCallId,\n          result: JSON.stringify(result)\n        }\n      ]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        -48
+      ],
+      "id": "4dcba633-d62f-44fa-8ab6-dfca98fac33c",
+      "name": "Check Preferred Slot"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        -48
+      ],
+      "id": "a182adad-bdce-481f-b3f9-d73e6dbf4bbc",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Date Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Date Range": {
+      "main": [
+        [
+          {
+            "node": "Find Available Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Available Slots": {
+      "main": [
+        [
+          {
+            "node": "Check Preferred Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Preferred Slot": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "20d153fe-172d-4a93-a2ca-dd1586f50476",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_SECRET"
+  },
+  "nodeGroups": [],
+  "id": "cxga89G4MyETyaIH",
+  "tags": []
+}
